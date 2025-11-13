@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://postgres:root@db/postgres"
     CORS_ORIGINS: Union[str, List[str]] = ["http://localhost", "http://localhost:5173", "*"]
     LOG_LEVEL: str = "INFO"
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/google/callback"
     
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

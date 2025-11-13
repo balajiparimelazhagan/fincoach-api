@@ -1,5 +1,6 @@
 import asyncio
 from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import QueuePool
 from databases import Database
@@ -12,7 +13,7 @@ logger = get_logger(__name__)
 # SQLAlchemy Base for models
 Base = declarative_base()
 
-# SQLAlchemy engine with connection pooling
+# SQLAlchemy engine with connection pooling (for migrations)
 engine = create_engine(
     settings.DATABASE_URL,
     poolclass=QueuePool,
@@ -22,7 +23,21 @@ engine = create_engine(
     echo=False
 )
 
-# Async database instance for FastAPI
+# Async SQLAlchemy engine for ORM operations
+async_engine = create_async_engine(
+    settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
+    pool_pre_ping=True,
+    echo=False
+)
+
+# Async session factory
+AsyncSessionLocal = async_sessionmaker(
+    async_engine,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
+
+# Async database instance for FastAPI (for raw queries if needed)
 database = Database(
     settings.DATABASE_URL,
     min_size=5,
@@ -55,3 +70,12 @@ async def connect_with_retry(max_retries: int = 3, delay: float = 1.0):
                 logger.error("Failed to connect to database after all retries")
                 raise
     return False
+
+
+async def get_db_session() -> AsyncSession:
+    """Dependency to get async database session"""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()

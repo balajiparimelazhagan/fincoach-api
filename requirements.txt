@@ -1,9 +1,13 @@
 uvicorn
 fastapi
 starlette
-sqlalchemy
+sqlalchemy[asyncio]
 databases
 psycopg2
 asyncpg
 python-dotenv
 pydantic-settings
+alembic
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
