@@ -9,6 +9,7 @@ from app.config import settings
 from app.db import AsyncSessionLocal
 from app.models.user import User
 from app.logging_config import get_logger
+from app.utils.jwt import create_access_token
 
 logger = get_logger(__name__)
 
@@ -138,12 +139,17 @@ async def google_callback(
                 
                 await session.commit()
                 await session.refresh(existing_user)
+                jwt_token = create_access_token(
+                    data={"sub": str(existing_user.id), "email": existing_user.email}
+                )
                 
                 logger.info(f"User already exists, tokens updated: {email}")
                 return {
                     "message": "User already exists, tokens updated",
                     "user_id": existing_user.id,
-                    "email": existing_user.email
+                    "email": existing_user.email,
+                    "access_token": jwt_token,
+                    "token_type": "bearer"
                 }
 
             # Create new user using model
@@ -162,11 +168,18 @@ async def google_callback(
             await session.commit()
             await session.refresh(new_user)
 
+            # Create JWT token for new user
+            jwt_token = create_access_token(
+                data={"sub": str(new_user.id), "email": new_user.email}
+            )
+
             logger.info(f"New user created with tokens: {email}")
             return {
                 "message": "User created successfully",
                 "user_id": new_user.id,
-                "email": new_user.email
+                "email": new_user.email,
+                "access_token": jwt_token,
+                "token_type": "bearer"
             }
 
     except ValueError as e:
