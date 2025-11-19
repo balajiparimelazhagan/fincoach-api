@@ -1,5 +1,6 @@
 from app.db import Base
 from app.models.user import User
+from app.models.currency import Currency
 
-__all__ = ["Base", "User"]
+__all__ = ["Base", "User", "Currency"]
 
