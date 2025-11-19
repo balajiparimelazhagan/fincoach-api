@@ -3,9 +3,10 @@ from fastapi import APIRouter
 api_router = APIRouter()
 
 # Import route modules here
-from app.routes import auth, transactors, categories
+from app.routes import auth, transactors, categories, users
 
 api_router.include_router(auth.router)
 api_router.include_router(transactors.router)
 api_router.include_router(categories.router)
+api_router.include_router(users.router)
 
