@@ -1,12 +1,13 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from google.auth.transport.requests import Request
 from google.oauth2 import id_token
 from google_auth_oauthlib.flow import Flow
 import uuid
 
 from app.config import settings
-from app.db import AsyncSessionLocal
+from app.dependencies import get_db
 from app.models.user import User
 from app.logging_config import get_logger
 from app.utils.jwt import create_access_token
@@ -57,7 +58,8 @@ async def google_signin():
 @router.get("/google/callback")
 async def google_callback(
     code: str = Query(..., description="Authorization code from Google"),
-    state: str = Query(None, description="State parameter for CSRF protection")
+    state: str = Query(None, description="State parameter for CSRF protection"),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Handles Google OAuth callback.
@@ -115,72 +117,71 @@ async def google_callback(
         token_expiry = credentials.expiry
 
         # Check if user exists and create if not exists using ORM
-        async with AsyncSessionLocal() as session:
-            try:
-                # Check if user exists
-                result = await session.execute(
-                    select(User).where(User.google_id == google_id)
-                )
-                existing_user = result.scalar_one_or_none()
-            except Exception as db_error:
-                logger.error(f"Database error - columns might not exist. Run migration: {db_error}")
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Database schema error. Please run migrations: {str(db_error)}"
-                )
+        try:
+            # Check if user exists
+            result = await db.execute(
+                select(User).where(User.google_id == google_id)
+            )
+            existing_user = result.scalar_one_or_none()
+        except Exception as db_error:
+            logger.error(f"Database error - columns might not exist. Run migration: {db_error}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database schema error. Please run migrations: {str(db_error)}"
+            )
 
-            if existing_user:
-                # Update existing user with new tokens
-                existing_user.access_token = access_token
-                existing_user.refresh_token = refresh_token
-                existing_user.token_expiry = token_expiry
-                existing_user.name = name
-                existing_user.picture = picture
-                
-                await session.commit()
-                await session.refresh(existing_user)
-                jwt_token = create_access_token(
-                    data={"sub": str(existing_user.id), "email": existing_user.email}
-                )
-                
-                logger.info(f"User already exists, tokens updated: {email}")
-                return {
-                    "message": "User already exists, tokens updated",
-                    "user_id": existing_user.id,
-                    "email": existing_user.email,
-                    "access_token": jwt_token,
-                    "token_type": "bearer"
-                }
-
-            # Create new user using model
-            new_user = User(
-                id=str(uuid.uuid4()),
-                email=email,
-                name=name,
-                google_id=google_id,
-                picture=picture,
-                access_token=access_token,
-                refresh_token=refresh_token,
-                token_expiry=token_expiry
+        if existing_user:
+            # Update existing user with new tokens
+            existing_user.access_token = access_token
+            existing_user.refresh_token = refresh_token
+            existing_user.token_expiry = token_expiry
+            existing_user.name = name
+            existing_user.picture = picture
+            
+            await db.commit()
+            await db.refresh(existing_user)
+            jwt_token = create_access_token(
+                data={"sub": str(existing_user.id), "email": existing_user.email}
             )
             
-            session.add(new_user)
-            await session.commit()
-            await session.refresh(new_user)
-
-            # Create JWT token for new user
-            jwt_token = create_access_token(
-                data={"sub": str(new_user.id), "email": new_user.email}
-            )
-
-            logger.info(f"New user created with tokens: {email}")
+            logger.info(f"User already exists, tokens updated: {email}")
             return {
-                "message": "User created successfully",
-                "user_id": new_user.id,
-                "email": new_user.email,
+                "message": "User already exists, tokens updated",
+                "user_id": existing_user.id,
+                "email": existing_user.email,
                 "access_token": jwt_token,
                 "token_type": "bearer"
             }
+
+        # Create new user using model
+        new_user = User(
+            id=str(uuid.uuid4()),
+            email=email,
+            name=name,
+            google_id=google_id,
+            picture=picture,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_expiry=token_expiry
+        )
+        
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
+
+        # Create JWT token for new user
+        jwt_token = create_access_token(
+            data={"sub": str(new_user.id), "email": new_user.email}
+        )
+
+        logger.info(f"New user created with tokens: {email}")
+        return {
+            "message": "User created successfully",
+            "user_id": new_user.id,
+            "email": new_user.email,
+            "access_token": jwt_token,
+            "token_type": "bearer"
+        }
 
     except ValueError as e:
         logger.error(f"Token verification failed: {e}")
