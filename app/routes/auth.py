@@ -1,9 +1,11 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from google.auth.transport.requests import Request
 from google.oauth2 import id_token
 from google_auth_oauthlib.flow import Flow
+from urllib.parse import urlencode
 import uuid
 
 from app.config import settings
@@ -145,13 +147,9 @@ async def google_callback(
             )
             
             logger.info(f"User already exists, tokens updated: {email}")
-            return {
-                "message": "User already exists, tokens updated",
-                "user_id": existing_user.id,
-                "email": existing_user.email,
-                "access_token": jwt_token,
-                "token_type": "bearer"
-            }
+            # Redirect to frontend dashboard with token
+            redirect_url = f"{settings.FRONTEND_BASE_URL}{settings.FORNTEND_LOGIN_REDIRECT_PATH}?{urlencode({'token': jwt_token})}"
+            return RedirectResponse(url=redirect_url)
 
         # Create new user using model
         new_user = User(
@@ -175,13 +173,9 @@ async def google_callback(
         )
 
         logger.info(f"New user created with tokens: {email}")
-        return {
-            "message": "User created successfully",
-            "user_id": new_user.id,
-            "email": new_user.email,
-            "access_token": jwt_token,
-            "token_type": "bearer"
-        }
+        # Redirect to frontend dashboard with token
+        redirect_url = f"{settings.FRONTEND_BASE_URL}{settings.FORNTEND_LOGIN_REDIRECT_PATH}?{urlencode({'token': jwt_token})}"
+        return RedirectResponse(url=redirect_url)
 
     except ValueError as e:
         logger.error(f"Token verification failed: {e}")
