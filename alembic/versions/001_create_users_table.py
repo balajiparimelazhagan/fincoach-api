@@ -29,6 +29,8 @@ def upgrade() -> None:
         sa.Column('name', sa.String(), nullable=True),
         sa.Column('google_id', sa.String(), nullable=False),
         sa.Column('picture', sa.String(), nullable=True),
+        sa.Column('google_credentials_json', sa.String(), nullable=True),
+        sa.Column('google_token_pickle', sa.LargeBinary(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     )

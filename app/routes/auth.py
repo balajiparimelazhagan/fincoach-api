@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from google.auth.transport.requests import Request
@@ -7,6 +7,8 @@ from google.oauth2 import id_token
 from google_auth_oauthlib.flow import Flow
 from urllib.parse import urlencode
 import uuid
+import json
+import pickle
 
 from app.config import settings
 from app.dependencies import get_db
@@ -19,7 +21,12 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # OAuth 2.0 scopes
-SCOPES = ['openid', 'https://www.googleapis.com/auth/userinfo.profile', 'https://www.googleapis.com/auth/userinfo.email']
+SCOPES = [
+    'openid',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/gmail.readonly'  # Added Gmail read-only scope
+]
 
 
 @router.get("/google/signin")
@@ -139,6 +146,8 @@ async def google_callback(
             existing_user.token_expiry = token_expiry
             existing_user.name = name
             existing_user.picture = picture
+            existing_user.google_credentials_json = credentials.to_json()
+            existing_user.google_token_pickle = pickle.dumps(credentials)
             
             await db.commit()
             await db.refresh(existing_user)
@@ -160,7 +169,9 @@ async def google_callback(
             picture=picture,
             access_token=access_token,
             refresh_token=refresh_token,
-            token_expiry=token_expiry
+            token_expiry=token_expiry,
+            google_credentials_json=credentials.to_json(),
+            google_token_pickle=pickle.dumps(credentials)
         )
         
         db.add(new_user)

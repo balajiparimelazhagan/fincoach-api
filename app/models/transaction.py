@@ -19,7 +19,7 @@ class Transaction(Base):
     confidence = Column(String, nullable=True)
     currency_id = Column(UUID(as_uuid=False), ForeignKey('currencies.id', ondelete='SET NULL'), nullable=True)
     user_id = Column(UUID(as_uuid=False), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
-    message_id = Column(String, nullable=True)
+    message_id = Column(String, nullable=True, unique=True)
     
     # Relationships
     user = relationship("User", backref="transactions")
