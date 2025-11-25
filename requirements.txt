@@ -14,5 +14,6 @@ google-auth-httplib2
 pyjwt
 python-jose[cryptography]
 httpx
-apscheduler
+celery[redis]
+redis
 google-adk
