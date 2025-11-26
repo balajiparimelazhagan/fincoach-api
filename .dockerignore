@@ -1,0 +1,16 @@
+# Ignore git metadata and unnecessary files in the docker build context
+.git
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+venv/
+.venv/
+node_modules/
+dist/
+build/
+.vscode/
+/.dockerignore
+README.md
+tests/

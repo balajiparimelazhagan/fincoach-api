@@ -4,14 +4,66 @@ Converts email content into structured transaction data using Google ADK Agent.
 """
 
 from dataclasses import dataclass
-from typing import Optional, List, Dict
-from enum import Enum
-from google.adk.agents.llm_agent import Agent
-import json
-import re
-import os
-from pathlib import Path
 from datetime import datetime
+from enum import Enum
+import json
+import os
+import re
+from typing import Dict, List, Optional, Tuple
+
+from dotenv import load_dotenv
+from google.adk.agents.llm_agent import Agent
+
+from .regex_constants import (
+    ACCOUNT_PATTERN,
+    ALT_ACCOUNT_PATTERN,
+    ALT_AMOUNT_PATTERN,
+    ALT_REF_PATTERN,
+    AMOUNT_PATTERN,
+    BANK_PATTERN,
+    BILL_PATTERN,
+    CREDIT_PATTERN,
+    DATE_PATTERN,
+    DEBIT_PATTERN,
+    REF_PATTERN,
+    TRANSFER_PATTERN,
+    UPI_PATTERN,
+)
+
+load_dotenv()
+
+DEFAULT_CATEGORIES = [
+    "Groceries",
+    "Transportation",
+    "Utilities",
+    "Entertainment",
+    "Healthcare",
+    "Shopping",
+    "Dining",
+    "Salary",
+    "Bonus",
+    "Refund",
+    "Bills",
+    "Insurance",
+    "Subscription",
+    "UPI Transfer",
+    "Other",
+]
+
+DATE_FORMATS: Tuple[str, ...] = (
+    "%d-%m-%Y %H:%M:%S",
+    "%d/%m/%Y %H:%M:%S",
+    "%d-%m-%y %H:%M:%S",
+    "%d/%m/%y %H:%M:%S",
+    "%d-%m-%Y %H:%M",
+    "%d/%m/%Y %H:%M",
+    "%d-%m-%y %H:%M",
+    "%d/%m/%y %H:%M",
+    "%d-%m-%Y",
+    "%d/%m/%Y",
+    "%d-%m-%y",
+    "%d/%m/%y",
+)
 
 
 class TransactionType(Enum):
@@ -49,101 +101,51 @@ class Transaction:
 class EmailParserAgent:
     """Email Parser Agent using Google ADK"""
 
-    # Common transaction categories
-    PREDEFINED_CATEGORIES = [
-        "Groceries",
-        "Transportation",
-        "Utilities",
-        "Entertainment",
-        "Healthcare",
-        "Shopping",
-        "Dining",
-        "Salary",
-        "Bonus",
-        "Refund",
-        "Bills",
-        "Insurance",
-        "Subscription",
-        "UPI Transfer",
-        "Other",
-    ]
-
     def __init__(self):
         """Initialize the email parser agent"""
-        # Load API key first
-        api_key = self._load_api_key()
+        self.categories = list(DEFAULT_CATEGORIES)
+        self._categories_cache = ", ".join(self.categories)
+        self._system_message = self._get_system_message()      
         
-        # Set environment variable for google.genai to pick up
-        if api_key:
-            os.environ["GOOGLE_API_KEY"] = api_key
-        
-        try:
-            from google.genai import Client
-            # Client will use the GOOGLE_API_KEY environment variable
-            self.client = Client()
-            self.use_genai = True
-        except Exception as e:
-            print(f"Warning: Could not initialize Genai client: {e}")
-            self.use_genai = False
-        
+    
         self.agent = Agent(
             model="gemini-2.5-flash",
             name="email_parser_agent",
             description="Extracts transaction information from email content",
-            instruction=self._get_parsing_instruction(),
+            instruction=self._system_message,
         )
 
-    def _load_api_key(self) -> Optional[str]:
-        """Load API key from .env file or environment variable"""
-        # First try environment variable
-        api_key = os.getenv("GOOGLE_API_KEY")
-        if api_key:
-            return api_key
-        
-        # Then try .env file in my_agent directory
-        env_path = Path(__file__).parent / ".env"
-        if env_path.exists():
-            try:
-                with open(env_path, "r") as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line or line.startswith("#"):
-                            continue
-                        if line.startswith("GOOGLE_API_KEY="):
-                            key = line.split("=", 1)[1].strip()
-                            if key:
-                                return key
-            except Exception as e:
-                print(f"Warning: Could not read .env file: {e}")
-        
-        return None
-
-    def _get_parsing_instruction(self) -> str:
-        """Generate the instruction for the agent"""
-        categories_str = ", ".join(self.PREDEFINED_CATEGORIES)
+    def _get_system_message(self) -> str:
+        """Create the reusable parsing instruction."""
+        categories_str = self._categories_cache
         return f"""You are an expert email parser for financial transactions. 
-Your task is to extract transaction information from email content.
+            Your task is to extract transaction information from email content.
 
-For each email, extract:
-1. Amount (numerical value)
-2. Transaction Type (either 'income' or 'expenditure')
-3. Date (in YYYY-MM-DD format, use current date if not found)
-4. Category (choose from: {categories_str})
-5. Description (brief description of the transaction)
-6. Source (who sent the email or company name)
+            For each email, extract:
+            1. Amount (numerical value)
+            2. Transaction Type (either 'income' or 'expenditure')
+            3. Date and Time (in YYYY-MM-DD HH:MM:SS format, use current date and time if not found)
+            4. Category (choose from: {categories_str})
+            5. Description (brief description of the transaction)
+            6. Source (who sent the email or company name)
 
-Always return the response as a valid JSON object with these exact fields:
-{{
-    "amount": <number>,
-    "transaction_type": "<income or expenditure>",
-    "date": "<YYYY-MM-DD>",
-    "category": "<category>",
-    "description": "<description>",
-    "source": "<source>"
-}}
+            Always return the response as a valid JSON object with these exact fields:
+            {{
+                "amount": <number>,
+                "transaction_type": "<income or expenditure>",
+                "date": "<YYYY-MM-DD HH:MM:SS>",
+                "category": "<category>",
+                "description": "<description>",
+                "source": "<source>"
+            }}
 
-If any information is missing, make a reasonable inference based on the email content.
-Be precise with amounts and dates. For ambiguous cases, indicate confidence level."""
+            If any information is missing, make a reasonable inference based on the email content.
+            Be precise with amounts and dates. For ambiguous cases, indicate confidence level."""
+
+    def _refresh_system_message(self) -> None:
+        """Refresh cached category string and parsing instruction."""
+        self._categories_cache = ", ".join(self.categories)
+        self._system_message = self._get_system_message()
 
     def parse_email(self, message_id: str, email_subject: str, email_body: str) -> Optional[Transaction]:
         """
@@ -186,10 +188,10 @@ Be precise with amounts and dates. For ambiguous cases, indicate confidence leve
 
         # Amount detection (handles Rs., INR, ₹ and numbers with commas)
         amount = None
-        amt_match = re.search(r"(?i)(?:Rs\.?|INR|₹)\s*([0-9][0-9,]*\.?[0-9]*)", text)
+        amt_match = AMOUNT_PATTERN.search(text)
         if not amt_match:
             # fallback to plain numbers with currency-like context
-            amt_match = re.search(r"([0-9][0-9,]*\.?[0-9]{0,2})\s*(?:INR|Rs|Rs\.|₹)", text, re.IGNORECASE)
+            amt_match = ALT_AMOUNT_PATTERN.search(text)
         if amt_match:
             try:
                 amt_str = amt_match.group(1).replace(",", "")
@@ -197,68 +199,64 @@ Be precise with amounts and dates. For ambiguous cases, indicate confidence leve
             except Exception:
                 amount = None
 
-        # Date detection: dd-mm-yy or dd-mm-yyyy or dd/mm/yy
+        # Date detection: dd-mm-yy or dd-mm-yyyy or dd/mm/yy with optional time
         date_str = None
-        date_match = re.search(r"(\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b)", text)
+        date_match = DATE_PATTERN.search(text)
         if date_match:
             raw = date_match.group(1)
-            # normalize to YYYY-MM-DD
-            for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%d-%m-%y", "%d/%m/%y"):
+            # normalize to YYYY-MM-DD HH:MM:SS
+            for fmt in DATE_FORMATS:
                 try:
                     dt = datetime.strptime(raw, fmt)
                     # two-digit years: assume 2000s
                     if dt.year < 100:
                         dt = dt.replace(year=dt.year + 2000)
-                    date_str = dt.strftime("%Y-%m-%d")
+                    date_str = dt.strftime("%Y-%m-%d %H:%M:%S")
                     break
                 except Exception:
                     continue
 
         # Transaction type: debit/credited keywords
         trans_type = None
-        if re.search(r"\bdebited\b|\bdebit\b|\bwithdrawn\b", text, re.IGNORECASE):
+        if DEBIT_PATTERN.search(text):
             trans_type = "expenditure"
-        elif re.search(r"\bcredited\b|\bdeposit(ed)?\b|\brefund\b", text, re.IGNORECASE):
+        elif CREDIT_PATTERN.search(text):
             trans_type = "income"
 
         # Source / bank name
         source = None
-        bank_match = re.search(r"(HDFC Bank|State Bank of India|SBI|ICICI Bank|Axis Bank|Kotak|Punjab National Bank)", text, re.IGNORECASE)
+        bank_match = BANK_PATTERN.search(text)
         if bank_match:
             source = bank_match.group(1)
 
         # UPI / reference detection
         ref = None
-        ref_match = re.search(r"reference (?:number )?(?:is )?:?\s*(\d{6,})", text, re.IGNORECASE)
+        ref_match = REF_PATTERN.search(text)
         if not ref_match:
-            ref_match = re.search(r"UPI transaction reference number is\s*(\d+)", text, re.IGNORECASE)
+            ref_match = ALT_REF_PATTERN.search(text)
         if ref_match:
             ref = ref_match.group(1)
 
         # Account info
         acct_from = None
-        acct_match = re.search(r"from account\s*(\d{2,}\d*)", text, re.IGNORECASE)
+        acct_match = ACCOUNT_PATTERN.search(text)
         if acct_match:
             acct_from = acct_match.group(1)
         else:
-            acct_match = re.search(r"acct(?:ount)?[:#]?\s*(\d{2,}\d*)", text, re.IGNORECASE)
+            acct_match = ALT_ACCOUNT_PATTERN.search(text)
             if acct_match:
                 acct_from = acct_match.group(1)
 
         # Category inference
         category = None
-        if re.search(r"\bUPI\b|UPI transaction|UPI ref|upi", text, re.IGNORECASE):
+        if UPI_PATTERN.search(text):
             category = "UPI Transfer"
-        elif re.search(r"transfer to|transferred to|debited from account .* to account", text, re.IGNORECASE):
+        elif TRANSFER_PATTERN.search(text):
             category = "Bank Transfer"
-        elif re.search(r"bill|due date|payment due|bill amount|electricity|water|gas|bill", text, re.IGNORECASE):
+        elif BILL_PATTERN.search(text):
             category = "Bills"
         else:
             category = "Other"
-
-        if category and category not in self.PREDEFINED_CATEGORIES:
-            # add dynamically for clarity
-            self.PREDEFINED_CATEGORIES.append(category)
 
         # Description
         desc_parts = []
@@ -278,7 +276,7 @@ Be precise with amounts and dates. For ambiguous cases, indicate confidence leve
         if amount is not None:
             result["amount"] = amount
             result["transaction_type"] = trans_type or "expenditure"
-            result["date"] = date_str or datetime.now().strftime("%Y-%m-%d")
+            result["date"] = date_str or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             result["category"] = category or "Other"
             result["description"] = description
             result["source"] = source or ""
@@ -299,41 +297,22 @@ Be precise with amounts and dates. For ambiguous cases, indicate confidence leve
             The model's response as a string
         """
         try:
-            if not self.use_genai:
-                print("Error: Genai client not initialized. Check your API key.")
-                return ""
+            from google.genai import Client
+            client = Client()
             
-            full_prompt = f"""{self._get_parsing_instruction()}
-
-EMAIL TO PARSE:
-{email_content}"""
+            prompt = f"""{self._system_message}
+                EMAIL TO PARSE:
+                {email_content}"""
             
-            response = self.client.models.generate_content(
+            response = client.models.generate_content(
                 model="gemini-2.5-flash",
-                contents=full_prompt,
+                contents=prompt,
             )
             
             return response.text
         except Exception as e:
             print(f"Error querying model: {e}")
             return ""
-
-    def parse_emails_batch(self, emails: List[tuple]) -> List[Transaction]:
-        """
-        Parse multiple emails in batch.
-
-        Args:
-            emails: List of tuples (subject, body)
-
-        Returns:
-            List of parsed Transaction objects
-        """
-        transactions = []
-        for subject, body in emails:
-            transaction = self.parse_email(subject, body)
-            if transaction:
-                transactions.append(transaction)
-        return transactions
 
     def _extract_json_from_response(self, response: str) -> Optional[dict]:
         """
@@ -401,12 +380,3 @@ EMAIL TO PARSE:
         except (ValueError, KeyError) as e:
             print(f"Error creating transaction: {e}")
             return None
-
-    def add_category(self, category: str) -> None:
-        """Add a new category to the predefined list"""
-        if category not in self.PREDEFINED_CATEGORIES:
-            self.PREDEFINED_CATEGORIES.append(category)
-
-    def get_categories(self) -> List[str]:
-        """Get list of available categories"""
-        return self.PREDEFINED_CATEGORIES.copy()

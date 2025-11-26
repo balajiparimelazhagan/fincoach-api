@@ -8,5 +8,5 @@ echo "Running database migrations..."
 alembic upgrade head
 
 echo "Starting application..."
-exec uvicorn app.main:app --reload --workers 1 --host 0.0.0.0 --port 8000
+exec uvicorn app.main:app --workers 1 --host 0.0.0.0 --port 8000
 

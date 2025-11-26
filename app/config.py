@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Union, Optional
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
 
@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "your-secret-key-change-in-production"
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    EMAIL_FETCH_DAYS: int = 90
+    GOOGLE_API_KEY: Optional[str] = None
+    
+    # Celery Configuration
+    CELERY_BROKER_URL: str = "redis://redis:6379/0"
+    CELERY_RESULT_BACKEND: str = "redis://redis:6379/0"
     
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -23,9 +29,12 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in v.split(",")]
         return v
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": True,
+        "extra": "ignore",
+    }
 
 
 settings = Settings()

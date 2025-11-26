@@ -4,14 +4,25 @@ services:
     depends_on:
       db:
         condition: service_started
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import http.client,sys; conn=http.client.HTTPConnection('localhost',8000, timeout=2); conn.request('GET','/health'); r=conn.getresponse(); sys.exit(0 if r.status==200 else 1)\""]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     volumes:
       - .:/usr/app/
     ports:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://postgres:root@db/postgres
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     networks:
       - api
+  
   db:
     image: postgres:18-alpine
     volumes:
@@ -24,6 +35,53 @@ services:
       - "5434:5432"
     networks:
       - api
+  
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - api
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+  
+  celery_worker:
+    build: .
+    entrypoint: ["/usr/app/celery_worker_entrypoint.sh"]
+    depends_on:
+      - db
+      - redis
+      - api
+    volumes:
+      - .:/usr/app/
+    environment:
+      - DATABASE_URL=postgresql://postgres:root@db/postgres
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    networks:
+      - api
+    restart: unless-stopped
+  
+  celery_beat:
+    build: .
+    entrypoint: ["/usr/app/celery_beat_entrypoint.sh"]
+    depends_on:
+      - db
+      - redis
+      - api
+      - celery_worker
+    volumes:
+      - .:/usr/app/
+    environment:
+      - DATABASE_URL=postgresql://postgres:root@db/postgres
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    networks:
+      - api
+    restart: unless-stopped
 
 volumes:
   postgres_data:

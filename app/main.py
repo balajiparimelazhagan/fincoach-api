@@ -2,9 +2,6 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-import asyncio
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.executors.asyncio import AsyncIOExecutor
 
 from app.config import settings
 from app.db import database
@@ -12,7 +9,6 @@ from app.exceptions import AppException
 from app.routes import api_router
 from app.logging_config import setup_logging, get_logger
 from app.middleware.logging_middleware import LoggingMiddleware
-from app.mail.fetch_and_parse import fetch_and_parse_all_users_emails
 
 # Setup logging
 setup_logging(settings.LOG_LEVEL)
@@ -25,20 +21,13 @@ async def lifespan(app: FastAPI):
         logger.info("Starting up...")
         from app.db import connect_with_retry
         await connect_with_retry()
-
-        # Initialize and start the scheduler
-        scheduler = AsyncIOScheduler()
-        # remove max_emails from kwargs for production
-        scheduler.add_job(fetch_and_parse_all_users_emails, 'interval', minutes=10, kwargs={'max_emails': 10})
-        scheduler.start()
-        logger.info("Scheduler started. Fetching emails for all users every 10 minutes and saving to DB.")
+        
+        # Email sync is now handled by Celery workers and Celery Beat
+        logger.info("Application started. Email sync handled by Celery workers.")
         
         yield
     finally:
         logger.info("Shutting down...")
-        if 'scheduler' in locals() and scheduler.running:
-            scheduler.shutdown()
-            logger.info("Scheduler shut down.")
         await database.disconnect()
 
 

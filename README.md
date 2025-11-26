@@ -113,8 +113,10 @@ Once the application is running, you can access:
 
 3. Run the application:
    ```bash
-   uvicorn app.main:app --reload
+   uvicorn app.main:app
    ```
+
+Note: The container runs uvicorn without auto-reload by default to avoid scanning `.git` and other large directories. For local development, run `uvicorn app.main:app` or use your preferred dev server configuration.
 
 ## Project Structure
 
