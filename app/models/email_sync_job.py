@@ -25,13 +25,18 @@ class EmailSyncJob(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    status = Column(SQLEnum(JobStatus), default=JobStatus.PENDING, nullable=False, index=True)
+    status = Column(
+        SQLEnum(JobStatus, name='jobstatus', values_callable=lambda enum_cls: [e.value for e in enum_cls]),
+        default=JobStatus.PENDING,
+        nullable=False,
+        index=True,
+    )
     total_emails = Column(Integer, default=0, nullable=False)
     processed_emails = Column(Integer, default=0, nullable=False)
     parsed_transactions = Column(Integer, default=0, nullable=False)
     failed_emails = Column(Integer, default=0, nullable=False)
     progress_percentage = Column(Float, default=0.0, nullable=False)
-    error_log = Column(JSONB, default=list, nullable=False)  # Store parsing failures
+    error_log = Column(JSONB, default=list, nullable=False)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
