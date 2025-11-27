@@ -69,7 +69,7 @@ DATE_FORMATS: Tuple[str, ...] = (
 class TransactionType(Enum):
     """Enum for transaction types"""
     INCOME = "income"
-    EXPENDITURE = "expenditure"
+    EXPENDITURE = "expense"
 
 
 @dataclass
@@ -123,7 +123,7 @@ class EmailParserAgent:
 
             For each email, extract:
             1. Amount (numerical value)
-            2. Transaction Type (either 'income' or 'expenditure')
+            2. Transaction Type (either 'income' or 'expense')
             3. Date and Time (in YYYY-MM-DD HH:MM:SS format, use current date and time if not found)
             4. Category (choose from: {categories_str})
             5. Description (brief description of the transaction)
@@ -132,7 +132,7 @@ class EmailParserAgent:
             Always return the response as a valid JSON object with these exact fields:
             {{
                 "amount": <number>,
-                "transaction_type": "<income or expenditure>",
+                "transaction_type": "<income or expense>",
                 "date": "<YYYY-MM-DD HH:MM:SS>",
                 "category": "<category>",
                 "description": "<description>",
@@ -219,7 +219,7 @@ class EmailParserAgent:
         # Transaction type: debit/credited keywords
         trans_type = None
         if DEBIT_PATTERN.search(text):
-            trans_type = "expenditure"
+            trans_type = "expense"
         elif CREDIT_PATTERN.search(text):
             trans_type = "income"
 
@@ -275,7 +275,7 @@ class EmailParserAgent:
         result: Dict = {}
         if amount is not None:
             result["amount"] = amount
-            result["transaction_type"] = trans_type or "expenditure"
+            result["transaction_type"] = trans_type or "expense"
             result["date"] = date_str or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             result["category"] = category or "Other"
             result["description"] = description
