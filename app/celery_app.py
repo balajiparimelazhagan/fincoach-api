@@ -11,7 +11,7 @@ celery_app = Celery(
     'fincoach',
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=['app.workers.email_tasks']  # Import task modules
+    include=['app.workers.email_tasks', 'app.spend_analysis_celery_workflow']  # Import task modules
 )
 
 # Celery configuration
@@ -32,10 +32,15 @@ celery_app.conf.update(
 
 # Celery Beat schedule for periodic tasks
 celery_app.conf.beat_schedule = {
-    'incremental-email-sync': {
-        'task': 'app.workers.email_tasks.schedule_incremental_sync',
-        'schedule': crontab(minute='*/2'),  # Every 30 minutes
-    },
+    # 'incremental-email-sync': {
+    #     'task': 'app.workers.email_tasks.schedule_incremental_sync',
+    #     'schedule': crontab(minute='*/2'),  # Every 30 minutes
+    # },
+    "run-spend-analysis-agent": {
+        "task": "app.spend_analysis_celery_workflow.process_transactions_for_spend_analysis",
+        "schedule": crontab(minute='*/5'), # Runs every 1 minute
+        "args": (), # No arguments are passed to the task
+    }
 }
 
 # Task routes (optional - for routing specific tasks to specific queues)
@@ -43,4 +48,5 @@ celery_app.conf.task_routes = {
     'app.workers.email_tasks.fetch_user_emails_initial': {'queue': 'email_processing'},
     'app.workers.email_tasks.fetch_user_emails_incremental': {'queue': 'email_processing'},
     'app.workers.email_tasks.schedule_incremental_sync': {'queue': 'scheduling'},
+    'app.spend_analysis_celery_workflow.process_transactions_for_spend_analysis': {'queue': 'scheduling'},
 }

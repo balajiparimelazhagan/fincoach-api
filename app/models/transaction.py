@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey, Numeric
+from sqlalchemy import Column, String, DateTime, ForeignKey, Numeric, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db import Base
@@ -20,6 +20,7 @@ class Transaction(Base):
     currency_id = Column(UUID(as_uuid=False), ForeignKey('currencies.id', ondelete='SET NULL'), nullable=True)
     user_id = Column(UUID(as_uuid=False), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     message_id = Column(String, nullable=True, unique=True)
+    processed = Column(Boolean, nullable=False, server_default='false')
     
     # Relationships
     user = relationship("User", backref="transactions")

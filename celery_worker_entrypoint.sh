@@ -29,5 +29,11 @@ do
 done
 echo "API ready!"
 
+echo "Waiting for Redis to be ready..."
+while ! nc -z redis 6379; do
+  sleep 1
+done
+echo "Redis is ready!"
+
 echo "Starting Celery worker..."
 exec celery -A app.celery_app worker --loglevel=info --concurrency=4 -Q email_processing,scheduling
