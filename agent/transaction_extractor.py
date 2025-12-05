@@ -26,6 +26,7 @@ from .regex_constants import (
     DATE_PATTERN,
     DEBIT_PATTERN,
     REF_PATTERN,
+    REFUND_PATTERN,
     TRANSFER_PATTERN,
     UPI_PATTERN,
 )
@@ -70,6 +71,7 @@ class TransactionType(Enum):
     """Enum for transaction types"""
     INCOME = "income"
     EXPENDITURE = "expense"
+    REFUND = "refund"
 
 
 @dataclass
@@ -130,7 +132,11 @@ class TransactionExtractorAgent:
 
             For each email, extract:
             1. Amount (numerical value)
-            2. Transaction Type (either 'income' or 'expense')
+            2. Transaction Type: CRITICAL - Determine the correct type:
+               - 'refund' if this is a REVERSAL, REFUND, or CANCELLED transaction (money returned)
+               - 'income' if money is being RECEIVED (credit, deposit, transfer in)
+               - 'expense' if money is being SPENT (debit, payment, transfer out)
+               Keywords for refund: reversal, reversed, refund, refunded, cancelled, cancellation, credited back
             3. Date and Time (in YYYY-MM-DD HH:MM:SS format, use current date and time if not found)
             4. Category (choose from: {categories_str})
             5. Description (brief description of the transaction)
@@ -140,7 +146,7 @@ class TransactionExtractorAgent:
             Always return the response as a valid JSON object with these exact fields:
             {{
                 "amount": <number>,
-                "transaction_type": "<income or expense>",
+                "transaction_type": "<income|expense|refund>",
                 "date": "<YYYY-MM-DD HH:MM:SS>",
                 "category": "<category>",
                 "description": "<description>",
@@ -225,9 +231,11 @@ class TransactionExtractorAgent:
                 except Exception:
                     continue
 
-        # Transaction type: debit/credited keywords
+        # Transaction type: Check for refund first, then debit/credit
         trans_type = None
-        if DEBIT_PATTERN.search(text):
+        if REFUND_PATTERN.search(text):
+            trans_type = "refund"
+        elif DEBIT_PATTERN.search(text):
             trans_type = "expense"
         elif CREDIT_PATTERN.search(text):
             trans_type = "income"

@@ -6,7 +6,8 @@ ALT_AMOUNT_PATTERN = re.compile(
 )
 DATE_PATTERN = re.compile(r"(\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b)")
 DEBIT_PATTERN = re.compile(r"\bdebited\b|\bdebit\b|\bwithdrawn\b", re.IGNORECASE)
-CREDIT_PATTERN = re.compile(r"\bcredited\b|\bdeposit(?:ed)?\b|\brefund\b", re.IGNORECASE)
+CREDIT_PATTERN = re.compile(r"\bcredited\b|\bdeposit(?:ed)?\b", re.IGNORECASE)
+REFUND_PATTERN = re.compile(r"\breversal\b|\breversed\b|\brefund(?:ed)?\b|\bcancell?ed\b|\bcancellation\b|\bcredited back\b|\breturn(?:ed)?\b", re.IGNORECASE)
 BANK_PATTERN = re.compile(
     r"(HDFC Bank|State Bank of India|SBI|ICICI Bank|Axis Bank|Kotak|Punjab National Bank)",
     re.IGNORECASE,

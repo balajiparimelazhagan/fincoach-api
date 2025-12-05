@@ -99,6 +99,23 @@ HDFC Bank""",
         "expected_intent": "transaction",
         "expected_extracted": True,
     },
+    {
+        "name": "Transaction Reversal/Refund",
+        "subject": "Transaction reversal initiated from A GITHUB, INC.",
+        "body": """Dear Customer,
+
+A transaction reversal of Rs. 888.40 has been initiated from A GITHUB, INC. to your HDFC Bank Credit Card ending 7420.
+
+This amount will be credited back to your account within 5-7 working days.
+
+Available credit limit: Rs. 86,320.40
+
+Thank you,
+HDFC Bank""",
+        "expected_intent": "transaction",
+        "expected_extracted": True,
+        "expected_type": "refund",
+    },
 ]
 
 
@@ -168,6 +185,17 @@ async def test_email_processing():
         print("VALIDATION:")
         intent_correct = result.intent_classification.intent.value == test_email['expected_intent']
         extraction_correct = result.processed == test_email['expected_extracted']
+        
+        # Check transaction type if specified
+        type_correct = True
+        if 'expected_type' in test_email and result.transaction:
+            expected_type = test_email['expected_type']
+            actual_type = result.transaction.transaction_type.value if hasattr(result.transaction.transaction_type, 'value') else str(result.transaction.transaction_type)
+            type_correct = actual_type == expected_type
+            if not type_correct:
+                print(f"  ✗ Transaction type WRONG (got {actual_type}, expected {expected_type})")
+            else:
+                print(f"  ✓ Transaction type CORRECT ({actual_type})")
         
         if intent_correct:
             print("  ✓ Intent classification CORRECT")

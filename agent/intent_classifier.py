@@ -55,9 +55,10 @@ class IntentClassifierAgent:
 Your task is to determine the PRIMARY intent of a financial email. Analyze the email content and classify it into one of these categories:
 
 1. TRANSACTION: Email contains information about an ACTUAL completed financial transaction
-   - Examples: Payment successful, money debited, money credited, transfer complete
-   - Keywords: "debited", "credited", "paid", "transferred", "transaction successful"
+   - Examples: Payment successful, money debited, money credited, transfer complete, refunds, reversals
+   - Keywords: "debited", "credited", "paid", "transferred", "transaction successful", "reversal", "refund", "cancelled"
    - Must have: Specific amount and transaction completion status
+   - IMPORTANT: Refunds and reversals are TRANSACTIONS, not promotional offers
 
 2. PROMOTIONAL: Email is marketing/promotional content
    - Examples: Offers, cashback promotions, discount vouchers, festive deals
