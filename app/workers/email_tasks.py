@@ -16,7 +16,7 @@ from app.models.transaction import Transaction as DBTransaction
 from app.models.category import Category
 from app.models.transactor import Transactor
 from app.models.currency import Currency
-from app.mail.gmail_fetcher import GmailFetcher
+from app.services.gmail_service import GmailService
 from agent.email_parser import EmailParserAgent
 from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
@@ -102,7 +102,7 @@ async def _fetch_user_emails_async(user_id: str, months: int = 6, is_initial: bo
         
         try:
             # Initialize fetcher and parser
-            fetcher = GmailFetcher(
+            fetcher = GmailService(
                 credentials_data=user.google_credentials_json,
                 token_data=user.google_token_pickle
             )
