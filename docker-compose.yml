@@ -50,7 +50,7 @@ services:
   
   celery_worker:
     build: .
-    entrypoint: ["/usr/app/celery_worker_entrypoint.sh"]
+    entrypoint: ["/usr/app/scripts/celery_worker_entrypoint.sh"]
     depends_on:
       - db
       - redis
@@ -67,7 +67,7 @@ services:
   
   celery_beat:
     build: .
-    entrypoint: ["/usr/app/celery_beat_entrypoint.sh"]
+    entrypoint: ["/usr/app/scripts/celery_beat_entrypoint.sh"]
     depends_on:
       - db
       - redis

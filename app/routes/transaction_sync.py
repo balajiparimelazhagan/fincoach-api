@@ -1,5 +1,5 @@
 """
-Email Sync API endpoints for triggering and monitoring email fetch jobs.
+Transaction Sync API endpoints for triggering and monitoring email fetch jobs.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.future import select
@@ -8,24 +8,24 @@ from typing import Optional
 from uuid import UUID
 
 from app.db import get_db_session
-from app.models.email_sync_job import EmailSyncJob, JobStatus
+from app.models.transaction_sync_job import TransactionSyncJob, JobStatus
 from app.models.user import User
-from app.workers.email_tasks import fetch_user_emails_initial
+from app.celery.celery_tasks import fetch_user_emails_initial
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/email-sync", tags=["Email Sync"])
+router = APIRouter(prefix="/email-sync", tags=["Transaction Sync"])
 
 
 @router.post("/start/{user_id}")
-async def start_email_sync(
+async def start_transaction_sync(
     user_id: str,
     months: int = Query(default=6, ge=1, le=24, description="Number of months to fetch (1-24)"),
     session: AsyncSession = Depends(get_db_session)
 ):
     """
-    Trigger initial email sync for a user.
+    Trigger initial transactions sync for a user.
     
     Args:
         user_id: User ID to sync emails for
@@ -41,14 +41,14 @@ async def start_email_sync(
     
     # Check if there's already a processing job
     existing_job = (await session.execute(
-        select(EmailSyncJob)
+        select(TransactionSyncJob)
         .filter_by(user_id=user_id, status=JobStatus.PROCESSING)
-        .order_by(EmailSyncJob.created_at.desc())
+        .order_by(TransactionSyncJob.created_at.desc())
     )).scalar_one_or_none()
     
     if existing_job:
         return {
-            "message": "Email sync already in progress",
+            "message": "Transactions sync already in progress",
             "job_id": str(existing_job.id),
             "status": existing_job.status.value
         }
@@ -56,10 +56,10 @@ async def start_email_sync(
     # Queue the task
     task = fetch_user_emails_initial.delay(user_id, months)
     
-    logger.info(f"Started email sync for user {user_id} (task_id: {task.id})")
+    logger.info(f"Started transactions sync for user {user_id} (task_id: {task.id})")
     
     return {
-        "message": "Email sync started",
+        "message": "Transactions sync started",
         "task_id": task.id,
         "user_id": user_id,
         "months": months
@@ -72,7 +72,7 @@ async def get_sync_status(
     session: AsyncSession = Depends(get_db_session)
 ):
     """
-    Get email sync status for a user.
+    Get transactions sync status for a user.
     
     Args:
         user_id: User ID
@@ -82,9 +82,9 @@ async def get_sync_status(
     """
     # Get most recent job
     job = (await session.execute(
-        select(EmailSyncJob)
+        select(TransactionSyncJob)
         .filter_by(user_id=user_id)
-        .order_by(EmailSyncJob.created_at.desc())
+        .order_by(TransactionSyncJob.created_at.desc())
     )).scalar_one_or_none()
     
     if not job:
@@ -114,7 +114,7 @@ async def get_sync_history(
     session: AsyncSession = Depends(get_db_session)
 ):
     """
-    Get email sync job history for a user.
+    Get transactions sync job history for a user.
     
     Args:
         user_id: User ID
@@ -124,9 +124,9 @@ async def get_sync_history(
         List of past sync jobs
     """
     jobs = (await session.execute(
-        select(EmailSyncJob)
+        select(TransactionSyncJob)
         .filter_by(user_id=user_id)
-        .order_by(EmailSyncJob.created_at.desc())
+        .order_by(TransactionSyncJob.created_at.desc())
         .limit(limit)
     )).scalars().all()
     
@@ -154,13 +154,13 @@ async def get_sync_history(
 @router.get("/stats")
 async def get_sync_stats(session: AsyncSession = Depends(get_db_session)):
     """
-    Get overall email sync statistics.
+    Get overall transactions sync statistics.
     
     Returns:
         Aggregated statistics across all users
     """
     # Get counts by status
-    total_jobs = (await session.execute(select(EmailSyncJob))).scalars().all()
+    total_jobs = (await session.execute(select(TransactionSyncJob))).scalars().all()
     
     stats = {
         "total_jobs": len(total_jobs),

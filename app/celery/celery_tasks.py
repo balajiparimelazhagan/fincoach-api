@@ -8,10 +8,10 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 import asyncio
 
-from app.celery_app import celery_app
+from app.celery.celery_app import celery_app
 from app.db import AsyncSessionLocal
 from app.models.user import User
-from app.models.email_sync_job import EmailSyncJob, JobStatus
+from app.models.transaction_sync_job import TransactionSyncJob, JobStatus
 from app.models.transaction import Transaction as DBTransaction
 from app.models.category import Category
 from app.models.transactor import Transactor
@@ -78,14 +78,14 @@ async def _fetch_user_emails_async(user_id: str, months: int = 6, is_initial: bo
         
         # Guard: avoid creating a new job if there's already one processing for the user
         existing_job = (await session.execute(
-            select(EmailSyncJob).filter_by(user_id=user_id, status=JobStatus.PROCESSING)
+            select(TransactionSyncJob).filter_by(user_id=user_id, status=JobStatus.PROCESSING)
         )).scalar_one_or_none()
         if existing_job:
             logger.info(f"Sync already in-progress for user {user_id}, skipping new job creation (job: {existing_job.id}).")
             return {"status": "skipped", "message": "Another sync job is already processing"}
 
         # Create sync job; if a concurrent job exists, the DB unique constraint will prevent duplicates
-        job = EmailSyncJob(
+        job = TransactionSyncJob(
             user_id=user_id,
             status=JobStatus.PROCESSING,
             started_at=datetime.utcnow()
@@ -191,7 +191,7 @@ async def _fetch_user_emails_async(user_id: str, months: int = 6, is_initial: bo
             raise
 
 
-async def _process_email_batch(session, emails: List, parser: EmailParserAgent, user_id: str, job: EmailSyncJob):
+async def _process_email_batch(session, emails: List, parser: EmailParserAgent, user_id: str, job: TransactionSyncJob):
     """Process a batch of emails and save transactions"""
     
     for email_item in emails:
@@ -329,7 +329,7 @@ async def _schedule_incremental_sync_async():
         max_runtime_hours = getattr(settings, "EMAIL_SYNC_JOB_MAX_RUNTIME_HOURS", 6)
         for user in users:
             existing_job = (await session.execute(
-                select(EmailSyncJob).filter_by(user_id=user.id, status=JobStatus.PROCESSING)
+                select(TransactionSyncJob).filter_by(user_id=user.id, status=JobStatus.PROCESSING)
             )).scalar_one_or_none()
             if existing_job:
                 # If the job started too long ago, mark it failed/stale and allow rescheduling

@@ -37,7 +37,7 @@
     └──────────┘                   └──────────┘
 ```
 
-## Data Flow: Initial Email Sync
+## Data Flow: Initial Transaction Sync
 
 ```
 User Signs Up
@@ -61,7 +61,7 @@ User Signs Up
                   │
                   ▼
 ┌─────────────────────────────────────────┐
-│  1. Create EmailSyncJob (status=PENDING) │
+│  1. Create TransactionSyncJob (status=PENDING) │
 │  2. Fetch emails from Gmail API          │
 │  3. Process in batches of 100            │
 └─────────────────┬───────────────────────┘
@@ -172,7 +172,7 @@ Every 30 Minutes
 - **Role**: Persistent Data Store
 - **Responsibilities**:
   - Store users, transactions, categories
-  - Track email sync jobs
+  - Track transactions sync jobs
   - Maintain referential integrity
 - **Port**: 5432 (5434 external)
 - **Scaling**: Vertical + Read Replicas
@@ -210,7 +210,7 @@ Every 30 Minutes
 
 ```
 ┌─────────────┐         ┌──────────────┐
-│    users    │         │ email_sync   │
+│    users    │         │ transaction_sync   │
 │             │◄────────┤    jobs      │
 │ id (PK)     │ 1     * │              │
 │ email       │         │ user_id (FK) │

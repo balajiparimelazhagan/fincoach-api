@@ -1,4 +1,4 @@
-"""create email_sync_jobs table
+"""create transaction_sync_jobs table
 
 Revision ID: 011
 Revises: 010
@@ -18,7 +18,7 @@ depends_on = None
 
 def upgrade():
     op.create_table(
-        'email_sync_jobs',
+        'transaction_sync_jobs',
         sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False, primary_key=True),
         sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('status', sa.Enum('pending', 'processing', 'completed', 'failed', 'paused', name='jobstatus'), nullable=False),
@@ -35,17 +35,17 @@ def upgrade():
     )
     
     # Create indexes
-    op.create_index('ix_email_sync_jobs_user_id', 'email_sync_jobs', ['user_id'])
-    op.create_index('ix_email_sync_jobs_status', 'email_sync_jobs', ['status'])
+    op.create_index('ix_transaction_sync_jobs_user_id', 'transaction_sync_jobs', ['user_id'])
+    op.create_index('ix_transaction_sync_jobs_status', 'transaction_sync_jobs', ['status'])
     # Create a partial unique index so at most one job in 'processing' state per user exists
     # Create the partial unique index using lowercase enum literal to match JobStatus values
-    op.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_email_sync_jobs_user_processing ON email_sync_jobs (user_id) WHERE status = 'processing';")
+    op.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_transaction_sync_jobs_user_processing ON transaction_sync_jobs (user_id) WHERE status = 'processing';")
 
 
 def downgrade():
     # Drop index if exists
-    op.execute("DROP INDEX IF EXISTS uq_email_sync_jobs_user_processing;")
-    op.drop_index('ix_email_sync_jobs_status', table_name='email_sync_jobs')
-    op.drop_index('ix_email_sync_jobs_user_id', table_name='email_sync_jobs')
-    op.drop_table('email_sync_jobs')
+    op.execute("DROP INDEX IF EXISTS uq_transaction_sync_jobs_user_processing;")
+    op.drop_index('ix_transaction_sync_jobs_status', table_name='transaction_sync_jobs')
+    op.drop_index('ix_transaction_sync_jobs_user_id', table_name='transaction_sync_jobs')
+    op.drop_table('transaction_sync_jobs')
     op.execute('DROP TYPE jobstatus')
