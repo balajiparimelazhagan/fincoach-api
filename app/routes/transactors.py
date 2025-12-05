@@ -26,7 +26,7 @@ async def create_transactor(
             id=str(uuid.uuid4()),
             name=transactor_data.name,
             user_id=current_user.id,
-            external_id=transactor_data.external_id,
+            source_id=transactor_data.source_id,
             picture=transactor_data.picture
         )
         

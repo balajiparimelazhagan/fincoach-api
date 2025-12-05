@@ -230,13 +230,35 @@ async def _process_email_batch(session, emails: List, parser: EmailParserAgent, 
                 await session.flush()
             
             # Get or create Transactor
-            transactor = (await session.execute(
-                select(Transactor).filter_by(name=transaction.source, user_id=user_id)
-            )).scalar_one_or_none()
+            # First try to find by source_id if provided, otherwise by name
+            transactor = None
+            if transaction.transactor_source_id:
+                transactor = (await session.execute(
+                    select(Transactor).filter_by(
+                        source_id=transaction.transactor_source_id, 
+                        user_id=user_id
+                    )
+                )).scalar_one_or_none()
+            
+            if not transactor and transaction.transactor:
+                transactor = (await session.execute(
+                    select(Transactor).filter_by(
+                        name=transaction.transactor, 
+                        user_id=user_id
+                    )
+                )).scalar_one_or_none()
             
             if not transactor:
-                transactor = Transactor(name=transaction.source, user_id=user_id)
+                transactor = Transactor(
+                    name=transaction.transactor or "Unknown",
+                    source_id=transaction.transactor_source_id,
+                    user_id=user_id
+                )
                 session.add(transactor)
+                await session.flush()
+            elif transaction.transactor_source_id and not transactor.source_id:
+                # Update existing transactor with source_id if not already set
+                transactor.source_id = transaction.transactor_source_id
                 await session.flush()
             
             # Get Currency (default INR)

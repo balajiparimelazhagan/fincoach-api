@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 class TransactorBase(BaseModel):
     name: str
-    external_id: Optional[str] = None
+    source_id: Optional[str] = None
     picture: Optional[str] = None
 
 
@@ -14,7 +14,7 @@ class TransactorCreate(TransactorBase):
 
 class TransactorUpdate(BaseModel):
     name: Optional[str] = None
-    external_id: Optional[str] = None
+    source_id: Optional[str] = None
     picture: Optional[str] = None
 
 

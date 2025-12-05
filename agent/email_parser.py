@@ -80,9 +80,15 @@ class Transaction:
     date: str
     category: str
     description: Optional[str] = None
-    source: Optional[str] = None
+    transactor: Optional[str] = None
+    transactor_source_id: Optional[str] = None
     confidence: float = 1.0
     message_id: Optional[str] = None
+    
+    # Keep source for backward compatibility (maps to transactor)
+    @property
+    def source(self) -> Optional[str]:
+        return self.transactor
 
     def to_dict(self):
         """Convert transaction to dictionary"""
@@ -92,7 +98,8 @@ class Transaction:
             "date": self.date,
             "category": self.category,
             "description": self.description,
-            "source": self.source,
+            "transactor": self.transactor,
+            "transactor_source_id": self.transactor_source_id,
             "confidence": self.confidence,
             "message_id": self.message_id,
         }
@@ -127,7 +134,8 @@ class EmailParserAgent:
             3. Date and Time (in YYYY-MM-DD HH:MM:SS format, use current date and time if not found)
             4. Category (choose from: {categories_str})
             5. Description (brief description of the transaction)
-            6. Source (who sent the email or company name)
+            6. Transactor (who sent the money or who received it, name of transactor or bank or UPI ID)
+            7. Transactor Source ID (transactor's UPI ID or bank ID or null if not available)
 
             Always return the response as a valid JSON object with these exact fields:
             {{
@@ -136,7 +144,8 @@ class EmailParserAgent:
                 "date": "<YYYY-MM-DD HH:MM:SS>",
                 "category": "<category>",
                 "description": "<description>",
-                "source": "<source>"
+                "transactor": "<transactor>",
+                "transactor_source_id": "<transactor_source_id>"
             }}
 
             If any information is missing, make a reasonable inference based on the email content.
@@ -279,7 +288,8 @@ class EmailParserAgent:
             result["date"] = date_str or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             result["category"] = category or "Other"
             result["description"] = description
-            result["source"] = source or ""
+            result["transactor"] = source or ""
+            result["transactor_source_id"] = ref or acct_from
             result["confidence"] = 0.8
             result["message_id"] = message_id
             return result
@@ -371,7 +381,8 @@ class EmailParserAgent:
                 date=data.get("date", ""),
                 category=data.get("category", "Other"),
                 description=data.get("description"),
-                source=data.get("source"),
+                transactor=data.get("transactor") or data.get("source"),
+                transactor_source_id=data.get("transactor_source_id"),
                 confidence=float(data.get("confidence", 1.0)),
                 message_id=message_id,
             )
