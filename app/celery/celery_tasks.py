@@ -17,7 +17,7 @@ from app.models.category import Category
 from app.models.transactor import Transactor
 from app.models.currency import Currency
 from app.services.gmail_service import GmailService
-from agent.email_parser import EmailParserAgent
+from agent.coordinator import EmailProcessingCoordinator
 from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
 from app.config import settings
@@ -106,7 +106,7 @@ async def _fetch_user_emails_async(user_id: str, months: int = 6, is_initial: bo
                 credentials_data=user.google_credentials_json,
                 token_data=user.google_token_pickle
             )
-            parser = EmailParserAgent()
+            coordinator = EmailProcessingCoordinator()
             
             # Determine date range
             if is_initial:
@@ -146,7 +146,7 @@ async def _fetch_user_emails_async(user_id: str, months: int = 6, is_initial: bo
             # Process in batches
             for i in range(0, len(all_emails), BATCH_SIZE):
                 batch = all_emails[i:i + BATCH_SIZE]
-                await _process_email_batch(session, batch, parser, user_id, job)
+                await _process_email_batch(session, batch, coordinator, user_id, job)
                 
                 # Update progress
                 job.processed_emails += len(batch)
@@ -191,8 +191,8 @@ async def _fetch_user_emails_async(user_id: str, months: int = 6, is_initial: bo
             raise
 
 
-async def _process_email_batch(session, emails: List, parser: EmailParserAgent, user_id: str, job: TransactionSyncJob):
-    """Process a batch of emails and save transactions"""
+async def _process_email_batch(session, emails: List, coordinator: EmailProcessingCoordinator, user_id: str, job: TransactionSyncJob):
+    """Process a batch of emails using A2A coordination and save transactions"""
     
     for email_item in emails:
         message_id = None
@@ -202,12 +202,21 @@ async def _process_email_batch(session, emails: List, parser: EmailParserAgent, 
             # Extract email data
             message_id, subject, body = email_item[:3]
             
-            # Parse email
-            transaction = parser.parse_email(message_id, subject, body)
+            # Process email with A2A coordination (Intent Classifier -> Transaction Extractor)
+            result = coordinator.process_email(message_id, subject, body)
+            
+            # Check if email was processed
+            if not result.processed:
+                job.skipped_emails += 1
+                logger.info(f"Skipped email: {subject[:50]}... - Reason: {result.skip_reason}")
+                continue
+            
+            # Get transaction from result
+            transaction = result.transaction
             
             if not transaction:
                 job.failed_emails += 1
-                logger.warning(f"Failed to parse email: {subject[:50]}...")
+                logger.warning(f"Failed to extract transaction: {subject[:50]}...")
                 continue
             
             # Check if transaction with this message_id already exists (avoid duplicate processing)

@@ -1,5 +1,5 @@
 """
-Email Parser Agent for extracting transaction information from emails.
+Transaction Extractor Agent for extracting transaction information from emails.
 Converts email content into structured transaction data using Google ADK Agent.
 """
 
@@ -105,11 +105,11 @@ class Transaction:
         }
 
 
-class EmailParserAgent:
-    """Email Parser Agent using Google ADK"""
+class TransactionExtractorAgent:
+    """Transaction Extractor Agent using Google ADK"""
 
     def __init__(self):
-        """Initialize the email parser agent"""
+        """Initialize the transaction extractor agent"""
         self.categories = list(DEFAULT_CATEGORIES)
         self._categories_cache = ", ".join(self.categories)
         self._system_message = self._get_system_message()      
@@ -117,7 +117,7 @@ class EmailParserAgent:
     
         self.agent = Agent(
             model="gemini-2.5-flash",
-            name="email_parser_agent",
+            name="transaction_extractor_agent",
             description="Extracts transaction information from email content",
             instruction=self._system_message,
         )
@@ -125,7 +125,7 @@ class EmailParserAgent:
     def _get_system_message(self) -> str:
         """Create the reusable parsing instruction."""
         categories_str = self._categories_cache
-        return f"""You are an expert email parser for financial transactions. 
+        return f"""You are an expert transaction extractor for financial data. 
             Your task is to extract transaction information from email content.
 
             For each email, extract:

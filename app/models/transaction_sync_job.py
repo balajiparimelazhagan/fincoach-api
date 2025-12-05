@@ -35,6 +35,7 @@ class TransactionSyncJob(Base):
     processed_emails = Column(Integer, default=0, nullable=False)
     parsed_transactions = Column(Integer, default=0, nullable=False)
     failed_emails = Column(Integer, default=0, nullable=False)
+    skipped_emails = Column(Integer, default=0, nullable=False)  # Emails filtered by intent classifier
     progress_percentage = Column(Float, default=0.0, nullable=False)
     error_log = Column(JSONB, default=list, nullable=False)
     started_at = Column(DateTime, nullable=True)
