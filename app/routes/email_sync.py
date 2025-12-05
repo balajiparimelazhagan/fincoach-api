@@ -10,7 +10,7 @@ from uuid import UUID
 from app.db import get_db_session
 from app.models.email_sync_job import EmailSyncJob, JobStatus
 from app.models.user import User
-from app.workers.email_tasks import fetch_user_emails_initial
+from app.celery.celery_tasks import fetch_user_emails_initial
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)

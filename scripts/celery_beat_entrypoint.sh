@@ -10,7 +10,7 @@ done
 echo "Redis is ready!"
 
 echo "Waiting for PostgreSQL to be ready..."
-python wait_for_db.py
+python /usr/app/scripts/wait_for_db.py
 
 echo "Waiting for API to be ready (poll /health)..."
 until python - <<'PY'
@@ -30,4 +30,4 @@ done
 echo "API ready!"
 
 echo "Starting Celery beat scheduler..."
-exec celery -A app.celery_app beat --loglevel=info
+exec celery -A app.celery.celery_app beat --loglevel=info

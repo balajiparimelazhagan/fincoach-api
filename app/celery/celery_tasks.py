@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 import asyncio
 
-from app.celery_app import celery_app
+from app.celery.celery_app import celery_app
 from app.db import AsyncSessionLocal
 from app.models.user import User
 from app.models.email_sync_job import EmailSyncJob, JobStatus
