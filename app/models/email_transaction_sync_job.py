@@ -1,5 +1,5 @@
 """
-Transaction Sync Job Model for tracking email fetch and parse progress.
+Email Transaction Sync Job Model for tracking email fetch and parse progress.
 """
 from sqlalchemy import Column, String, Integer, Float, DateTime, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -11,7 +11,7 @@ from app.db import Base
 
 
 class JobStatus(str, enum.Enum):
-    """Status of transactions sync job"""
+    """Status of email transactions sync job"""
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -19,9 +19,9 @@ class JobStatus(str, enum.Enum):
     PAUSED = "paused"
 
 
-class TransactionSyncJob(Base):
-    """Model for tracking transactions sync jobs"""
-    __tablename__ = "transaction_sync_jobs"
+class EmailTransactionSyncJob(Base):
+    """Model for tracking email transactions sync jobs"""
+    __tablename__ = "email_transaction_sync_jobs"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
@@ -44,4 +44,4 @@ class TransactionSyncJob(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     def __repr__(self):
-        return f"<TransactionSyncJob(id={self.id}, user_id={self.user_id}, status={self.status}, progress={self.progress_percentage}%)>"
+        return f"<EmailTransactionSyncJob(id={self.id}, user_id={self.user_id}, status={self.status}, progress={self.progress_percentage}%)>"

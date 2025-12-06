@@ -1,5 +1,5 @@
 """
-Transaction Sync API endpoints for triggering and monitoring email fetch jobs.
+Email Transaction Sync API endpoints for triggering and monitoring email fetch jobs.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.future import select
@@ -8,24 +8,24 @@ from typing import Optional
 from uuid import UUID
 
 from app.db import get_db_session
-from app.models.transaction_sync_job import TransactionSyncJob, JobStatus
+from app.models.email_transaction_sync_job import EmailTransactionSyncJob, JobStatus
 from app.models.user import User
 from app.celery.celery_tasks import fetch_user_emails_initial
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/email-sync", tags=["Transaction Sync"])
+router = APIRouter(prefix="/email-transaction-sync", tags=["Email Transaction Sync"])
 
 
 @router.post("/start/{user_id}")
-async def start_transaction_sync(
+async def start_email_transaction_sync(
     user_id: str,
     months: int = Query(default=6, ge=1, le=24, description="Number of months to fetch (1-24)"),
     session: AsyncSession = Depends(get_db_session)
 ):
     """
-    Trigger initial transactions sync for a user.
+    Trigger initial email transaction sync for a user.
     
     Args:
         user_id: User ID to sync emails for
@@ -41,14 +41,14 @@ async def start_transaction_sync(
     
     # Check if there's already a processing job
     existing_job = (await session.execute(
-        select(TransactionSyncJob)
+        select(EmailTransactionSyncJob)
         .filter_by(user_id=user_id, status=JobStatus.PROCESSING)
-        .order_by(TransactionSyncJob.created_at.desc())
+        .order_by(EmailTransactionSyncJob.created_at.desc())
     )).scalar_one_or_none()
     
     if existing_job:
         return {
-            "message": "Transactions sync already in progress",
+            "message": "Email transaction sync already in progress",
             "job_id": str(existing_job.id),
             "status": existing_job.status.value
         }
@@ -56,10 +56,10 @@ async def start_transaction_sync(
     # Queue the task
     task = fetch_user_emails_initial.delay(user_id, months)
     
-    logger.info(f"Started transactions sync for user {user_id} (task_id: {task.id})")
+    logger.info(f"Started email transaction sync for user {user_id} (task_id: {task.id})")
     
     return {
-        "message": "Transactions sync started",
+        "message": "Email transaction sync started",
         "task_id": task.id,
         "user_id": user_id,
         "months": months
@@ -67,12 +67,12 @@ async def start_transaction_sync(
 
 
 @router.get("/status/{user_id}")
-async def get_sync_status(
+async def get_email_transaction_sync_status(
     user_id: str,
     session: AsyncSession = Depends(get_db_session)
 ):
     """
-    Get transactions sync status for a user.
+    Get email transaction sync status for a user.
     
     Args:
         user_id: User ID
@@ -82,15 +82,15 @@ async def get_sync_status(
     """
     # Get most recent job
     job = (await session.execute(
-        select(TransactionSyncJob)
+        select(EmailTransactionSyncJob)
         .filter_by(user_id=user_id)
-        .order_by(TransactionSyncJob.created_at.desc())
+        .order_by(EmailTransactionSyncJob.created_at.desc())
     )).scalar_one_or_none()
     
     if not job:
         return {
             "status": "not_started",
-            "message": "No sync jobs found for this user"
+            "message": "No email transaction sync jobs found for this user"
         }
     
     return {
@@ -108,13 +108,13 @@ async def get_sync_status(
 
 
 @router.get("/history/{user_id}")
-async def get_sync_history(
+async def get_email_transaction_sync_history(
     user_id: str,
     limit: int = Query(default=10, ge=1, le=100, description="Number of jobs to return"),
     session: AsyncSession = Depends(get_db_session)
 ):
     """
-    Get transactions sync job history for a user.
+    Get email transaction sync job history for a user.
     
     Args:
         user_id: User ID
@@ -124,9 +124,9 @@ async def get_sync_history(
         List of past sync jobs
     """
     jobs = (await session.execute(
-        select(TransactionSyncJob)
+        select(EmailTransactionSyncJob)
         .filter_by(user_id=user_id)
-        .order_by(TransactionSyncJob.created_at.desc())
+        .order_by(EmailTransactionSyncJob.created_at.desc())
         .limit(limit)
     )).scalars().all()
     
@@ -152,15 +152,15 @@ async def get_sync_history(
 
 
 @router.get("/stats")
-async def get_sync_stats(session: AsyncSession = Depends(get_db_session)):
+async def get_email_transaction_sync_stats(session: AsyncSession = Depends(get_db_session)):
     """
-    Get overall transactions sync statistics.
+    Get overall email transaction sync statistics.
     
     Returns:
         Aggregated statistics across all users
     """
     # Get counts by status
-    total_jobs = (await session.execute(select(TransactionSyncJob))).scalars().all()
+    total_jobs = (await session.execute(select(EmailTransactionSyncJob))).scalars().all()
     
     stats = {
         "total_jobs": len(total_jobs),
