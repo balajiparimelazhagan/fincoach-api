@@ -9,9 +9,6 @@ while ! nc -z redis 6379; do
 done
 echo "Redis is ready!"
 
-echo "Waiting for PostgreSQL to be ready..."
-python /usr/app/scripts/wait_for_db.py
-
 echo "Waiting for API to be ready (poll /health)..."
 until python - <<'PY'
 import sys, http.client
