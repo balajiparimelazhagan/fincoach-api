@@ -43,4 +43,6 @@ celery_app.conf.task_routes = {
     'app.celery.celery_tasks.fetch_user_emails_initial': {'queue': 'email_processing'},
     'app.celery.celery_tasks.fetch_user_emails_incremental': {'queue': 'email_processing'},
     'app.celery.celery_tasks.schedule_incremental_sync': {'queue': 'scheduling'},
+    'app.celery.celery_tasks.analyze_spending_patterns': {'queue': 'scheduling'},
+    'app.celery.celery_tasks.process_sms_batch_task': {'queue': 'email_processing'},
 }

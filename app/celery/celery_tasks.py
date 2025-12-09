@@ -654,3 +654,201 @@ async def _process_sms_messages(
     except Exception as e:
         logger.error(f"Failed to commit final SMS transaction job progress: {e}", exc_info=True)
         await session.rollback()
+
+
+@celery_app.task(bind=True, max_retries=2)
+def analyze_spending_patterns(self, user_id: str, force_reanalyze: bool = False, job_id: str = None):
+    """
+    Background task to analyze spending patterns for a user with job tracking.
+    
+    Args:
+        user_id: User ID to analyze patterns for
+        force_reanalyze: Whether to reanalyze existing patterns
+        job_id: Pattern analysis job ID for tracking
+        
+    Returns:
+        Dict with analysis results
+    """
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    try:
+        result = loop.run_until_complete(_analyze_patterns_async(user_id, force_reanalyze, job_id))
+        logger.info(f"✅ Pattern analysis completed for user {user_id}: {result}")
+        return result
+    except Exception as exc:
+        logger.error(f"Pattern analysis task failed for user {user_id}: {exc}", exc_info=True)
+        raise self.retry(exc=exc, countdown=300 * (self.request.retries + 1))  # 5 min, 10 min retry
+
+
+async def _analyze_patterns_async(user_id: str, force_reanalyze: bool = False, job_id: str = None):
+    """
+    Async implementation of pattern analysis with job tracking.
+    
+    Args:
+        user_id: User ID
+        force_reanalyze: Force reanalysis
+        job_id: Pattern analysis job ID
+        
+    Returns:
+        Analysis results dict
+    """
+    from app.db import SessionLocal, AsyncSessionLocal  # Both sync and async sessions
+    from agent.pattern_analyzer_coordinator import PatternAnalyzerCoordinator
+    from app.models.pattern_analysis_job import PatternAnalysisJob, JobStatus
+    from app.config import settings
+    from sqlalchemy.future import select
+    
+    logger.info(f"🔍 Starting pattern analysis for user {user_id}, job {job_id}")
+    
+    # Update job status to PROCESSING using async session
+    async_db = AsyncSessionLocal()
+    try:
+        # Fetch job
+        result = await async_db.execute(
+            select(PatternAnalysisJob).where(PatternAnalysisJob.id == job_id)
+        )
+        job = result.scalar_one_or_none()
+        
+        if not job:
+            logger.error(f"Job {job_id} not found")
+            raise Exception(f"Job {job_id} not found")
+        
+        # Update to PROCESSING
+        job.status = JobStatus.PROCESSING
+        job.started_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        job.current_step = "initializing"
+        job.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        await async_db.commit()
+        await async_db.refresh(job)
+        
+    except Exception as e:
+        logger.error(f"Error updating job status to PROCESSING: {e}")
+        await async_db.rollback()
+        raise
+    finally:
+        await async_db.close()
+    
+    # Run pattern analysis with sync session (analyzers use sync)
+    sync_db = SessionLocal()
+    try:
+        # Update progress: Analyzing bills
+        await _update_job_progress(job_id, 10.0, "analyzing_bills")
+        
+        coordinator = PatternAnalyzerCoordinator(
+            db=sync_db,
+            min_occurrences=job.min_occurrences,
+            min_days_history=job.min_days_history
+        )
+        
+        result = coordinator.analyze_all_patterns(user_id, force_reanalyze=force_reanalyze)
+        
+        # Update job with results
+        await _update_job_completion(
+            job_id=job_id,
+            status=JobStatus.COMPLETED,
+            total_patterns=result.get('total_patterns', 0),
+            bill_patterns=result.get('bill_patterns_count', 0),
+            recurring_patterns=result.get('recurring_patterns_count', 0),
+            duplicates_removed=result.get('duplicates_removed', 0)
+        )
+        
+        return {
+            "status": "completed",
+            "user_id": user_id,
+            "job_id": job_id,
+            "total_patterns": result['total_patterns'],
+            "bill_patterns_count": result['bill_patterns_count'],
+            "recurring_patterns_count": result['recurring_patterns_count'],
+            "duplicates_removed": result['duplicates_removed']
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in pattern analysis for user {user_id}: {e}", exc_info=True)
+        
+        # Mark job as FAILED
+        await _update_job_failure(job_id, str(e))
+        raise
+        
+    finally:
+        sync_db.close()
+
+
+async def _update_job_progress(job_id: str, progress: float, step: str):
+    """Update job progress"""
+    async_db = AsyncSessionLocal()
+    try:
+        result = await async_db.execute(
+            select(PatternAnalysisJob).where(PatternAnalysisJob.id == job_id)
+        )
+        job = result.scalar_one_or_none()
+        if job:
+            job.progress_percentage = progress
+            job.current_step = step
+            job.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            await async_db.commit()
+    except Exception as e:
+        logger.error(f"Error updating job progress: {e}")
+        await async_db.rollback()
+    finally:
+        await async_db.close()
+
+
+async def _update_job_completion(job_id: str, status, total_patterns: int, bill_patterns: int, recurring_patterns: int, duplicates_removed: int):
+    """Mark job as completed with results"""
+    from app.models.pattern_analysis_job import PatternAnalysisJob, JobStatus
+    
+    async_db = AsyncSessionLocal()
+    try:
+        result = await async_db.execute(
+            select(PatternAnalysisJob).where(PatternAnalysisJob.id == job_id)
+        )
+        job = result.scalar_one_or_none()
+        if job:
+            job.status = status
+            job.progress_percentage = 100.0
+            job.current_step = "completed"
+            job.total_patterns_found = total_patterns
+            job.bill_patterns_found = bill_patterns
+            job.recurring_patterns_found = recurring_patterns
+            job.duplicates_removed = duplicates_removed
+            job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            job.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            await async_db.commit()
+    except Exception as e:
+        logger.error(f"Error updating job completion: {e}")
+        await async_db.rollback()
+    finally:
+        await async_db.close()
+
+
+async def _update_job_failure(job_id: str, error_message: str):
+    """Mark job as failed"""
+    from app.models.pattern_analysis_job import PatternAnalysisJob, JobStatus
+    
+    async_db = AsyncSessionLocal()
+    try:
+        result = await async_db.execute(
+            select(PatternAnalysisJob).where(PatternAnalysisJob.id == job_id)
+        )
+        job = result.scalar_one_or_none()
+        if job:
+            job.status = JobStatus.FAILED
+            job.error_message = error_message
+            job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            job.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            if job.error_log is None:
+                job.error_log = []
+            job.error_log.append({
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "error": error_message
+            })
+            await async_db.commit()
+    except Exception as e:
+        logger.error(f"Error updating job failure: {e}")
+        await async_db.rollback()
+    finally:
+        await async_db.close()

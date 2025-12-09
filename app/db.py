@@ -1,6 +1,7 @@
 import asyncio
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import QueuePool
 from databases import Database
@@ -13,7 +14,7 @@ logger = get_logger(__name__)
 # SQLAlchemy Base for models
 Base = declarative_base()
 
-# SQLAlchemy engine with connection pooling (for migrations)
+# SQLAlchemy engine with connection pooling (for migrations and sync operations)
 engine = create_engine(
     settings.DATABASE_URL,
     poolclass=QueuePool,
@@ -22,6 +23,9 @@ engine = create_engine(
     pool_pre_ping=True,
     echo=False
 )
+
+# Sync session factory for pattern analysis and other sync operations
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Async SQLAlchemy engine for ORM operations
 async_engine = create_async_engine(
@@ -79,3 +83,12 @@ async def get_db_session() -> AsyncSession:
             yield session
         finally:
             await session.close()
+
+
+def get_sync_db_session() -> Session:
+    """Dependency to get sync database session for pattern analysis"""
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()

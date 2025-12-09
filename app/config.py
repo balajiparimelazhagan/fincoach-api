@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://redis:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://redis:6379/0"
     
+    # Pattern Detection Configuration
+    PATTERN_MIN_OCCURRENCES: int = 3  # Minimum transactions to detect a pattern
+    PATTERN_MIN_DAYS_HISTORY: int = 60  # Minimum days of transaction history required
+    
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors_origins(cls, v):

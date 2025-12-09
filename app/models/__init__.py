@@ -9,6 +9,10 @@ from app.models.budget_item import BudgetItem
 from app.models.user_permission import UserPermission
 from app.models.sms_transaction_sync_job import SmsTransactionSyncJob
 from app.models.email_transaction_sync_job import EmailTransactionSyncJob
+from app.models.spending_pattern import SpendingPattern
+from app.models.pattern_transaction import PatternTransaction
+from app.models.pattern_user_feedback import PatternUserFeedback
+from app.models.pattern_analysis_job import PatternAnalysisJob
 
 __all__ = [
     "Base", 
@@ -21,6 +25,10 @@ __all__ = [
     "BudgetItem",
     "UserPermission",
     "SmsTransactionSyncJob",
-    "EmailTransactionSyncJob"
+    "EmailTransactionSyncJob",
+    "SpendingPattern",
+    "PatternTransaction",
+    "PatternUserFeedback",
+    "PatternAnalysisJob"
 ]
 
