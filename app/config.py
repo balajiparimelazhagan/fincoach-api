@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     EMAIL_FETCH_DAYS: int = 90
+    EMAIL_FETCH_ASCENDING: bool = False
     GOOGLE_API_KEY: Optional[str] = None
     
     # Celery Configuration

@@ -1,15 +1,13 @@
 import os
 import pickle
-import base64
 from typing import List, Tuple, Optional
 from datetime import datetime, timedelta, timezone
 import json
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-import email
-from pathlib import Path
 from app.logging_config import get_logger
+from app.services.google.helper import fetch_messages_paginated, get_email_content
 
 logger = get_logger(__name__)
 
@@ -148,15 +146,15 @@ class GmailService:
 
             # Choose between ascending (date-chunked) or standard fetch
             if ascending:
-                return self._fetch_ascending(base_query, max_results, since_date, chunk_days)
+                return self._fetch_ascending_order(base_query, max_results, since_date, chunk_days)
             else:
-                return self._fetch_standard(base_query, max_results, since_date)
+                return self._fetch_standard_order(base_query, max_results, since_date)
         
         except Exception as e:
             logger.error(f"Error fetching emails: {e}")
             return []
     
-    def _fetch_ascending(
+    def _fetch_ascending_order(
         self, 
         base_query: str, 
         max_results: Optional[int], 
@@ -189,7 +187,7 @@ class GmailService:
                 remaining = max_results - len(emails)
             
             # Fetch message IDs for this chunk
-            messages = self._fetch_messages_paginated(chunk_query, remaining)
+            messages = fetch_messages_paginated(self.service, chunk_query, remaining)
             
             if messages:
                 # Process messages in reverse order (oldest first within chunk)
@@ -199,7 +197,7 @@ class GmailService:
                     if not message_id or message_id in seen_ids:
                         continue
                     
-                    email_data = self._get_email_content(message_id)
+                    email_data = get_email_content(self.service, message_id)
                     if email_data:
                         emails.append(email_data)
                         seen_ids.add(message_id)
@@ -212,7 +210,7 @@ class GmailService:
         
         return emails
     
-    def _fetch_standard(
+    def _fetch_standard_order(
         self, 
         base_query: str, 
         max_results: Optional[int], 
@@ -227,7 +225,7 @@ class GmailService:
             query = f"{base_query} after:{after_timestamp}"
         
         # Fetch message IDs from Gmail
-        messages = self._fetch_messages_paginated(query, max_results)
+        messages = fetch_messages_paginated(self.service, query, max_results)
         if not messages:
             return []
         
@@ -238,143 +236,9 @@ class GmailService:
             if not message_id:
                 continue
             
-            email_data = self._get_email_content(message_id)
+            email_data = get_email_content(self.service, message_id)
             if email_data:
                 emails.append(email_data)
         
         return emails
-    
-    def _fetch_messages_paginated(
-        self, 
-        query: str, 
-        max_results: Optional[int]
-    ) -> List[dict]:
-        """Fetch message IDs from Gmail with pagination."""
-        
-        messages = []
-        page_token = None
-        results_per_page = max_results if max_results is not None else 500
-        
-        while True:
-            # Fetch page of results from Gmail API
-            response = self.service.users().messages().list(
-                userId='me',
-                q=query,
-                maxResults=results_per_page,
-                pageToken=page_token
-            ).execute()
-            
-            # Collect messages from this page
-            page_messages = response.get('messages', [])
-            if page_messages:
-                messages.extend(page_messages)
-            
-            # Stop if no more pages or reached limit
-            page_token = response.get('nextPageToken')
-            if not page_token or (max_results is not None and len(messages) >= max_results):
-                break
-        
-        return messages
-    
-    def _get_email_content(self, message_id: str) -> Optional[Tuple[str, str, str, datetime]]:
-        """
-        Get full email content from Gmail message ID.
-        
-        Args:
-            message_id: Gmail message ID
-        
-        Returns:
-            Tuple of (message_id, subject, body, date) or None
-        """
-        try:
-            # Fetch full message from Gmail
-            message = self.service.users().messages().get(
-                userId='me',
-                id=message_id,
-                format='full'
-            ).execute()
-            
-            headers = message['payload']['headers']
-            
-            # Extract subject from headers
-            subject = next(
-                (h['value'] for h in headers if h['name'] == 'Subject'), 
-                'No Subject'
-            )
-            
-            # Extract body from payload
-            body = self._extract_body(message['payload'])
-            
-            # Extract date: try internalDate (ms since epoch) first
-            email_date = None
-            if 'internalDate' in message:
-                try:
-                    milliseconds = int(message['internalDate'])
-                    email_date = datetime.fromtimestamp(milliseconds / 1000.0, tz=timezone.utc)
-                except Exception:
-                    pass
-            
-            # Fallback to Date header if internalDate failed
-            if not email_date:
-                date_header = next((h['value'] for h in headers if h['name'] == 'Date'), None)
-                if date_header:
-                    try:
-                        from email.utils import parsedate_to_datetime
-                        parsed_date = parsedate_to_datetime(date_header)
-                        if parsed_date.tzinfo is None:
-                            parsed_date = parsed_date.replace(tzinfo=timezone.utc)
-                        email_date = parsed_date
-                    except Exception:
-                        pass
-            
-            # Final fallback to current time
-            if not email_date:
-                email_date = datetime.now(timezone.utc)
-
-            return (message_id, subject, body, email_date)
-        
-        except Exception as e:
-            logger.error(f"Error getting email content: {e}")
-            return None
-    
-    def _extract_body(self, payload: dict) -> str:
-        """Extract email body from payload (prefer text/plain, fallback to text/html)."""
-        
-        # Handle multipart messages
-        if 'parts' in payload:
-            text_plain = ""
-            text_html = ""
-            
-            for part in payload['parts']:
-                mime_type = part.get('mimeType', '')
-                body_data = part.get('body', {}).get('data', '')
-                
-                if not body_data:
-                    continue
-                
-                # Decode base64url-encoded data
-                try:
-                    decoded = base64.urlsafe_b64decode(body_data).decode('utf-8', errors='ignore')
-                except Exception:
-                    continue
-                
-                # Collect text/plain and text/html parts
-                if mime_type == 'text/plain':
-                    text_plain += decoded
-                elif mime_type == 'text/html':
-                    text_html += decoded
-            
-            # Prefer text/plain over text/html
-            return (text_plain or text_html).strip()
-        
-        # Handle single-part messages
-        if 'body' in payload:
-            body_data = payload['body'].get('data', '')
-            if body_data:
-                try:
-                    return base64.urlsafe_b64decode(body_data).decode('utf-8', errors='ignore').strip()
-                except Exception:
-                    pass
-        
-        return ""
     

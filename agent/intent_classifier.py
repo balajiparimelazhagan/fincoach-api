@@ -73,6 +73,7 @@ Your task is to determine the PRIMARY intent of a financial email. Analyze the e
 4. UNKNOWN: Cannot determine intent with confidence
 
 CRITICAL RULES:
+- **Focus on EMAIL BODY content, not just subject line**
 - If email mentions a COMPLETED transaction with amount, classify as TRANSACTION
 - If email is offering deals/promotions even with amounts, classify as PROMOTIONAL
 - Payment reminders or due dates are INFORMATIONAL, not TRANSACTION
@@ -104,7 +105,7 @@ Set should_extract to true ONLY for TRANSACTION intent with confidence > 0.7"""
         email_content = f"""Subject: {subject}
 
 Body:
-{body[:1000]}"""  # Limit body to first 1000 chars for efficiency
+{body}"""
         
         try:
             # Query the agent for intent classification using Google Generative AI
@@ -153,6 +154,8 @@ EMAIL TO CLASSIFY:
             # Override should_extract if confidence is too low
             if confidence < 0.7:
                 should_extract = False
+
+            print("Intent Classification Result:", intent, confidence, reasoning, email_content)
             
             return IntentClassification(
                 intent=intent,
