@@ -88,6 +88,7 @@ class Transaction:
     message_id: Optional[str] = None
     bank_name: Optional[str] = None
     account_last_four: Optional[str] = None
+    account_type: str = "savings"
     
     # Keep source for backward compatibility (maps to transactor)
     @property
@@ -108,6 +109,7 @@ class Transaction:
             "message_id": self.message_id,
             "bank_name": self.bank_name,
             "account_last_four": self.account_last_four,
+            "account_type": self.account_type,
         }
 
 
@@ -205,6 +207,7 @@ class TransactionExtractorAgent:
                 # Add account info to transaction data
                 transaction_data['bank_name'] = account_info.bank_name
                 transaction_data['account_last_four'] = account_info.account_last_four
+                transaction_data['account_type'] = account_info.account_type
                 
                 # Create and return Transaction object
                 return self._create_transaction(transaction_data, message_id)
@@ -393,20 +396,24 @@ class TransactionExtractorAgent:
             if data.get("amount", 0) == 0:
                 return None
 
-            # Parse transaction type
+            # Parse transaction type - check category for Refund as well
             trans_type_str = data.get("transaction_type", "").lower()
-            transaction_type = (
-                TransactionType.INCOME
-                if trans_type_str == "income"
-                else TransactionType.EXPENDITURE
-            )
+            category = data.get("category", "Other")
+            
+            # If category is "Refund", transaction type should be "refund"
+            if category == "Refund" or trans_type_str == "refund":
+                transaction_type = TransactionType.REFUND
+            elif trans_type_str == "income":
+                transaction_type = TransactionType.INCOME
+            else:
+                transaction_type = TransactionType.EXPENDITURE
 
             # Create transaction
             transaction = Transaction(
                 amount=float(data.get("amount", 0)),
                 transaction_type=transaction_type,
                 date=data.get("date", ""),
-                category=data.get("category", "Other"),
+                category=category,
                 description=data.get("description"),
                 transactor=data.get("transactor") or data.get("source"),
                 transactor_source_id=data.get("transactor_source_id"),
@@ -414,6 +421,7 @@ class TransactionExtractorAgent:
                 message_id=message_id,
                 bank_name=data.get("bank_name"),
                 account_last_four=data.get("account_last_four"),
+                account_type=data.get("account_type", "savings"),
             )
 
             return transaction

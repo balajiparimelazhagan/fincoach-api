@@ -6,14 +6,15 @@ from typing import Optional
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.account import Account
+from app.models.account import Account, AccountType
 
 
 async def get_or_create_account(
     session: AsyncSession,
     user_id: str,
     account_last_four: str,
-    bank_name: str
+    bank_name: str,
+    account_type: str = "savings"
 ) -> Account:
     """
     Get or create an account based on user_id and account_last_four.
@@ -23,6 +24,7 @@ async def get_or_create_account(
         user_id: UUID string of the user
         account_last_four: Last 4 digits of the account number
         bank_name: Name of the bank
+        account_type: Type of account (credit, savings, current)
         
     Returns:
         Account: The existing or newly created account
@@ -39,14 +41,21 @@ async def get_or_create_account(
         # Update bank name if it was not set or if new one is more specific
         if not existing_account.bank_name or existing_account.bank_name == "Unknown":
             existing_account.bank_name = bank_name
-            await session.flush()
+        
+        # Update account type if different (e.g., upgraded from savings to credit)
+        type_enum = AccountType(account_type)
+        if existing_account.type != type_enum:
+            existing_account.type = type_enum
+        
+        await session.flush()
         return existing_account
     
     # Create new account
     new_account = Account(
         user_id=user_id,
         account_last_four=account_last_four,
-        bank_name=bank_name
+        bank_name=bank_name,
+        type=AccountType(account_type)
     )
     session.add(new_account)
     await session.flush()

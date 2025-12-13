@@ -68,6 +68,7 @@ class AccountInfo:
     """Data class representing extracted account information"""
     bank_name: Optional[str] = None
     account_last_four: Optional[str] = None
+    account_type: str = "savings"  # credit, savings, current
     confidence: float = 1.0
     
     def to_dict(self):
@@ -75,6 +76,7 @@ class AccountInfo:
         return {
             "bank_name": self.bank_name,
             "account_last_four": self.account_last_four,
+            "account_type": self.account_type,
             "confidence": self.confidence,
         }
 
@@ -105,34 +107,39 @@ class AccountExtractorAgent:
 Your task is to extract:
 1. Bank Name - The full name of the bank (e.g., "HDFC Bank", "ICICI Bank", "State Bank of India")
 2. Account Last Four Digits - The last 4 digits of the account or card number
+3. Account Type - Determine if this is a "credit" card, "savings" account, or "current" account
 
 Common patterns you'll see:
 - "account 4319" or "account ***4319"
 - "a/c XX4319" or "A/c **7890"
 - "card ending 5678" or "card xxxx5678"
+- "Credit Card" or "CC" → type is "credit"
+- "Savings Account" or "Savings A/c" → type is "savings"
+- "Current Account" → type is "current"
 - Bank names in text: "HDFC Bank", "SBI", "Axis Bank"
 - Bank names in sender: "alerts@hdfcbank.com", "HDFCBK"
 
 Always return the response as a valid JSON object with these exact fields:
 {
     "bank_name": "<full bank name or null>",
-    "account_last_four": "<4 digits or null>"
+    "account_last_four": "<4 digits or null>",
+    "account_type": "<credit|savings|current>"
 }
 
 Examples:
 
 1. Input: "Dear Customer, Rs.293.00 has been debited from account 4319 ... HDFC Bank"
-   Output: {"bank_name": "HDFC Bank", "account_last_four": "4319"}
+   Output: {"bank_name": "HDFC Bank", "account_last_four": "4319", "account_type": "savings"}
 
-2. Input: "Your account ***4319 has been debited with Rs.500.00"
+2. Input: "Your ICICI Bank Credit Card XX4319 has been used for a transaction of INR 500.00"
    Sender: "alerts@icicibank.com"
-   Output: {"bank_name": "ICICI Bank", "account_last_four": "4319"}
+   Output: {"bank_name": "ICICI Bank", "account_last_four": "4319", "account_type": "credit"}
 
 3. Input: "INR 1500.00 debited from a/c **7890 on 12-Dec-25. -State Bank of India"
-   Output: {"bank_name": "State Bank of India", "account_last_four": "7890"}
+   Output: {"bank_name": "State Bank of India", "account_last_four": "7890", "account_type": "savings"}
 
 4. Input: "Rs 750 spent on card ending xxxx5678 at Amazon. -Axis Bank"
-   Output: {"bank_name": "Axis Bank", "account_last_four": "5678"}
+   Output: {"bank_name": "Axis Bank", "account_last_four": "5678", "account_type": "credit"}
 
 Guidelines:
 - Extract the FULL official bank name when possible (e.g., "HDFC Bank" not "HDFC")
@@ -168,6 +175,7 @@ Guidelines:
                     return AccountInfo(
                         bank_name=account_data.get("bank_name"),
                         account_last_four=account_data.get("account_last_four"),
+                        account_type=account_data.get("account_type", "savings"),
                         confidence=0.95  # High confidence for LLM extraction
                     )
             
@@ -242,6 +250,7 @@ Guidelines:
         """Fallback extraction using regex patterns"""
         bank_name = self._extract_bank_name(message_text, sender_email, sender_sms)
         account_last_four = self._extract_account_last_four(message_text)
+        account_type = self._detect_account_type(message_text)
         
         # Lower confidence for regex-based extraction
         confidence = 0.7 if (bank_name or account_last_four) else 0.0
@@ -249,6 +258,7 @@ Guidelines:
         return AccountInfo(
             bank_name=bank_name,
             account_last_four=account_last_four,
+            account_type=account_type,
             confidence=confidence
         )
 
@@ -304,3 +314,26 @@ Guidelines:
                     return last_four
         
         return None
+
+    def _detect_account_type(self, text: str) -> str:
+        """Detect account type from text (credit card, savings, current)"""
+        if not text:
+            return "savings"
+        
+        text_lower = text.lower()
+        
+        # Check for credit card keywords
+        credit_keywords = [
+            r"credit\s*card", r"\bcc\b", r"card\s+ending", 
+            r"card\s+xx", r"credit\s+limit", r"available\s+credit"
+        ]
+        for keyword in credit_keywords:
+            if re.search(keyword, text_lower):
+                return "credit"
+        
+        # Check for current account keywords
+        if re.search(r"current\s+account|current\s+a/c", text_lower):
+            return "current"
+        
+        # Default to savings
+        return "savings"

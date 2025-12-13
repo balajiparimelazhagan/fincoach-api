@@ -93,6 +93,7 @@ class SmsTransaction:
     sender: Optional[str] = None  # SMS sender (e.g., bank short code)
     bank_name: Optional[str] = None
     account_last_four: Optional[str] = None
+    account_type: str = "savings"
     
     def to_dict(self):
         """Convert transaction to dictionary"""
@@ -109,6 +110,7 @@ class SmsTransaction:
             "sender": self.sender,
             "bank_name": self.bank_name,
             "account_last_four": self.account_last_four,
+            "account_type": self.account_type,
         }
 
 
@@ -225,6 +227,7 @@ Be precise with amounts and dates. Extract all relevant information from the SMS
                 # Add account info to transaction data
                 transaction_data['bank_name'] = account_info.bank_name
                 transaction_data['account_last_four'] = account_info.account_last_four
+                transaction_data['account_type'] = account_info.account_type
                 
                 # Create and return SmsTransaction object
                 return self._create_transaction(transaction_data, sms_id, sender)
@@ -388,11 +391,20 @@ Be precise with amounts and dates. Extract all relevant information from the SMS
     ) -> Optional[SmsTransaction]:
         """Create SmsTransaction object from parsed data"""
         try:
+            # Check if category is Refund and override transaction_type
+            category = data.get("category", "Other")
+            trans_type_str = data.get("transaction_type", "expense")
+            
+            if category.lower() == "refund":
+                transaction_type = TransactionType.REFUND
+            else:
+                transaction_type = TransactionType(trans_type_str)
+            
             return SmsTransaction(
                 amount=float(data["amount"]),
-                transaction_type=TransactionType(data["transaction_type"]),
+                transaction_type=transaction_type,
                 date=data["date"],
-                category=data["category"],
+                category=category,
                 description=data.get("description"),
                 transactor=data.get("transactor"),
                 transactor_source_id=data.get("transactor_source_id"),
@@ -401,6 +413,7 @@ Be precise with amounts and dates. Extract all relevant information from the SMS
                 sender=sender,
                 bank_name=data.get("bank_name"),
                 account_last_four=data.get("account_last_four"),
+                account_type=data.get("account_type", "savings"),
             )
         except (KeyError, ValueError) as e:
             print(f"Error creating transaction: {e}")

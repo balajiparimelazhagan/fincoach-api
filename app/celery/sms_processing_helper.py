@@ -207,7 +207,8 @@ async def process_sms_messages(
                     session=session,
                     user_id=user_id,
                     account_last_four=transaction.account_last_four,
-                    bank_name=transaction.bank_name or "Unknown"
+                    bank_name=transaction.bank_name or "Unknown",
+                    account_type=getattr(transaction, 'account_type', 'savings')
                 )
             
             # Create transaction
