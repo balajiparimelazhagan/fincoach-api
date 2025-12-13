@@ -15,7 +15,10 @@ from app.models.transaction import Transaction as DBTransaction
 from app.models.category import Category
 from app.models.transactor import Transactor
 from app.models.currency import Currency
+from app.models.account import Account
 from app.services.google.mail import GmailService
+from app.services.account_service import get_or_create_account
+from app.utils.bank_extractor import extract_bank_and_account
 from agent.coordinator import EmailProcessingCoordinator
 from app.config import settings
 
@@ -221,8 +224,9 @@ async def process_email_batch(session, emails: List, coordinator: EmailProcessin
         subject = None
         
         try:
-            # Extract email data
+            # Extract email data (includes sender email as 5th element)
             message_id, subject, body = email_item[:3]
+            sender_email = email_item[4] if len(email_item) > 4 else None
             
             # Process email with A2A coordination (Intent Classifier -> Transaction Extractor)
             result = coordinator.process_email(message_id, subject, body)
@@ -302,6 +306,19 @@ async def process_email_batch(session, emails: List, coordinator: EmailProcessin
                 session.add(currency)
                 await session.flush()
             
+            # Extract and get or create Account
+            account = None
+            bank_name, account_last_four = extract_bank_and_account(body, sender_email)
+            if account_last_four:
+                # Use extracted bank name or default to "Unknown"
+                final_bank_name = bank_name or "Unknown"
+                account = await get_or_create_account(
+                    session=session,
+                    user_id=user_id,
+                    account_last_four=account_last_four,
+                    bank_name=final_bank_name
+                )
+            
             # Create transaction
             db_transaction = DBTransaction(
                 amount=transaction.amount,
@@ -313,7 +330,8 @@ async def process_email_batch(session, emails: List, coordinator: EmailProcessin
                 category_id=category.id,
                 transactor_id=transactor.id,
                 currency_id=currency.id,
-                message_id=message_id
+                message_id=message_id,
+                account_id=account.id if account else None
             )
             session.add(db_transaction)
             

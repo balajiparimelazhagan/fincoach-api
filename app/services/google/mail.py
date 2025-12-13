@@ -117,7 +117,7 @@ class GmailService:
         query: Optional[str] = None, 
         ascending: bool = False, 
         chunk_days: int = 7
-    ) -> List[Tuple[str, str, str, datetime]]:
+    ) -> List[Tuple[str, str, str, datetime, str]]:
         """
         Fetch bank transaction emails from Gmail.
         
@@ -130,7 +130,7 @@ class GmailService:
             chunk_days: When ascending is True, the number of days per query chunk.
 
         Returns:
-            List of tuples (message_id, subject, body, date)
+            List of tuples (message_id, subject, body, date, sender_email)
         """
         if not self.service:
             logger.error("Error: Gmail service not initialized")
@@ -160,7 +160,7 @@ class GmailService:
         max_results: Optional[int], 
         since_date: Optional[datetime], 
         chunk_days: int
-    ) -> List[Tuple[str, str, str, datetime]]:
+    ) -> List[Tuple[str, str, str, datetime, str]]:
         """Fetch emails in ascending order (oldest first) using date chunks."""
         
         # Set date range: default to 6 months ago if not provided
@@ -215,7 +215,7 @@ class GmailService:
         base_query: str, 
         max_results: Optional[int], 
         since_date: Optional[datetime]
-    ) -> List[Tuple[str, str, str, datetime]]:
+    ) -> List[Tuple[str, str, str, datetime, str]]:
         """Fetch emails using standard query (newest first)."""
         
         # Add date filter to query if provided

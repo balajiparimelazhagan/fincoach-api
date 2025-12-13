@@ -9,6 +9,7 @@ from app.models.budget_item import BudgetItem
 from app.models.user_permission import UserPermission
 from app.models.sms_transaction_sync_job import SmsTransactionSyncJob
 from app.models.email_transaction_sync_job import EmailTransactionSyncJob
+from app.models.account import Account
 
 __all__ = [
     "Base", 
@@ -21,6 +22,7 @@ __all__ = [
     "BudgetItem",
     "UserPermission",
     "SmsTransactionSyncJob",
-    "EmailTransactionSyncJob"
+    "EmailTransactionSyncJob",
+    "Account"
 ]
 

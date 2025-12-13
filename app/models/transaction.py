@@ -20,10 +20,12 @@ class Transaction(Base):
     currency_id = Column(UUID(as_uuid=False), ForeignKey('currencies.id', ondelete='SET NULL'), nullable=True)
     user_id = Column(UUID(as_uuid=False), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     message_id = Column(String, nullable=True, unique=True)
+    account_id = Column(UUID(as_uuid=False), ForeignKey('accounts.id', ondelete='SET NULL'), nullable=True, index=True)
     
     # Relationships
     user = relationship("User", backref="transactions")
     category = relationship("Category", backref="transactions")
     currency = relationship("Currency", backref="transactions")
     transactor = relationship("Transactor", backref="transactions")
+    account = relationship("Account", backref="transactions")
 

@@ -44,7 +44,7 @@ def fetch_messages_paginated(service, query: str, max_results: Optional[int]) ->
     return messages
 
 
-def get_email_content(service, message_id: str) -> Optional[Tuple[str, str, str, datetime]]:
+def get_email_content(service, message_id: str) -> Optional[Tuple[str, str, str, datetime, str]]:
     """
     Get full email content from Gmail message ID.
     
@@ -53,7 +53,7 @@ def get_email_content(service, message_id: str) -> Optional[Tuple[str, str, str,
         message_id: Gmail message ID
     
     Returns:
-        Tuple of (message_id, subject, body, date) or None
+        Tuple of (message_id, subject, body, date, sender_email) or None
     """
     try:
         # Fetch full message from Gmail
@@ -69,6 +69,12 @@ def get_email_content(service, message_id: str) -> Optional[Tuple[str, str, str,
         subject = next(
             (h['value'] for h in headers if h['name'] == 'Subject'), 
             'No Subject'
+        )
+        
+        # Extract sender email from From header
+        sender = next(
+            (h['value'] for h in headers if h['name'] == 'From'),
+            ''
         )
         
         # Extract body from payload
@@ -100,7 +106,7 @@ def get_email_content(service, message_id: str) -> Optional[Tuple[str, str, str,
         if not email_date:
             email_date = datetime.now(timezone.utc)
 
-        return (message_id, subject, body, email_date)
+        return (message_id, subject, body, email_date, sender)
     
     except Exception as e:
         logger.error(f"Error getting email content: {e}")

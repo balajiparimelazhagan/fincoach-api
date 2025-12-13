@@ -15,6 +15,9 @@ from app.models.transaction import Transaction as DBTransaction
 from app.models.category import Category
 from app.models.transactor import Transactor
 from app.models.currency import Currency
+from app.models.account import Account
+from app.services.account_service import get_or_create_account
+from app.utils.bank_extractor import extract_bank_and_account
 from agent.coordinator import SmsProcessingCoordinator
 
 logger = get_task_logger(__name__)
@@ -198,6 +201,19 @@ async def process_sms_messages(
                 session.add(currency)
                 await session.flush()
             
+            # Extract and get or create Account
+            account = None
+            bank_name, account_last_four = extract_bank_and_account(body, sender_email=None)
+            if account_last_four:
+                # Use extracted bank name or default to "Unknown"
+                final_bank_name = bank_name or "Unknown"
+                account = await get_or_create_account(
+                    session=session,
+                    user_id=user_id,
+                    account_last_four=account_last_four,
+                    bank_name=final_bank_name
+                )
+            
             # Create transaction
             db_transaction = DBTransaction(
                 amount=transaction.amount,
@@ -209,7 +225,8 @@ async def process_sms_messages(
                 category_id=category.id,
                 transactor_id=transactor.id,
                 currency_id=currency.id,
-                message_id=sms_id  # Store SMS ID in message_id field
+                message_id=sms_id,  # Store SMS ID in message_id field
+                account_id=account.id if account else None
             )
             session.add(db_transaction)
             
