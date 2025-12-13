@@ -86,6 +86,8 @@ class Transaction:
     transactor_source_id: Optional[str] = None
     confidence: float = 1.0
     message_id: Optional[str] = None
+    bank_name: Optional[str] = None
+    account_last_four: Optional[str] = None
     
     # Keep source for backward compatibility (maps to transactor)
     @property
@@ -104,6 +106,8 @@ class Transaction:
             "transactor_source_id": self.transactor_source_id,
             "confidence": self.confidence,
             "message_id": self.message_id,
+            "bank_name": self.bank_name,
+            "account_last_four": self.account_last_four,
         }
 
 
@@ -116,6 +120,9 @@ class TransactionExtractorAgent:
         self._categories_cache = ", ".join(self.categories)
         self._system_message = self._get_system_message()      
         
+        # Initialize account extractor for A2A coordination
+        from agent.account_extractor import AccountExtractorAgent
+        self.account_extractor = AccountExtractorAgent()
     
         self.agent = Agent(
             model="gemini-2.5-flash",
@@ -162,7 +169,7 @@ class TransactionExtractorAgent:
         self._categories_cache = ", ".join(self.categories)
         self._system_message = self._get_system_message()
 
-    def parse_email(self, message_id: str, email_subject: str, email_body: str) -> Optional[Transaction]:
+    def parse_email(self, message_id: str, email_subject: str, email_body: str, sender_email: Optional[str] = None) -> Optional[Transaction]:
         """
         Parse an email and extract transaction information.
 
@@ -170,9 +177,10 @@ class TransactionExtractorAgent:
             message_id: The Gmail message ID.
             email_subject: Subject line of the email
             email_body: Body content of the email
+            sender_email: Optional sender email address for account extraction
 
         Returns:
-            Transaction object with extracted information, or None if parsing fails
+            Transaction object with extracted information (including account info), or None if parsing fails
         """
         # Prepare the email content for the agent
         email_content = f"Subject: {email_subject}\n\nBody:\n{email_body}"
@@ -187,6 +195,17 @@ class TransactionExtractorAgent:
                 transaction_data = self._parse_with_regex(message_id, email_subject, email_body)
 
             if transaction_data:
+                # Extract account information using A2A coordination
+                account_info = self.account_extractor.extract_account_info(
+                    message_text=email_body,
+                    sender_email=sender_email,
+                    sender_sms=None
+                )
+                
+                # Add account info to transaction data
+                transaction_data['bank_name'] = account_info.bank_name
+                transaction_data['account_last_four'] = account_info.account_last_four
+                
                 # Create and return Transaction object
                 return self._create_transaction(transaction_data, message_id)
         except Exception as e:
@@ -393,6 +412,8 @@ class TransactionExtractorAgent:
                 transactor_source_id=data.get("transactor_source_id"),
                 confidence=float(data.get("confidence", 1.0)),
                 message_id=message_id,
+                bank_name=data.get("bank_name"),
+                account_last_four=data.get("account_last_four"),
             )
 
             return transaction

@@ -17,7 +17,6 @@ from app.models.transactor import Transactor
 from app.models.currency import Currency
 from app.models.account import Account
 from app.services.account_service import get_or_create_account
-from app.utils.bank_extractor import extract_bank_and_account
 from agent.coordinator import SmsProcessingCoordinator
 
 logger = get_task_logger(__name__)
@@ -201,17 +200,14 @@ async def process_sms_messages(
                 session.add(currency)
                 await session.flush()
             
-            # Extract and get or create Account
+            # Get or create Account from transaction data (already extracted by coordinator)
             account = None
-            bank_name, account_last_four = extract_bank_and_account(body, sender_email=None)
-            if account_last_four:
-                # Use extracted bank name or default to "Unknown"
-                final_bank_name = bank_name or "Unknown"
+            if transaction.account_last_four:
                 account = await get_or_create_account(
                     session=session,
                     user_id=user_id,
-                    account_last_four=account_last_four,
-                    bank_name=final_bank_name
+                    account_last_four=transaction.account_last_four,
+                    bank_name=transaction.bank_name or "Unknown"
                 )
             
             # Create transaction

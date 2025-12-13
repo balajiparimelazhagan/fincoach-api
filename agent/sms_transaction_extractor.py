@@ -91,6 +91,8 @@ class SmsTransaction:
     confidence: float = 1.0
     sms_id: Optional[str] = None  # Unique SMS identifier from device
     sender: Optional[str] = None  # SMS sender (e.g., bank short code)
+    bank_name: Optional[str] = None
+    account_last_four: Optional[str] = None
     
     def to_dict(self):
         """Convert transaction to dictionary"""
@@ -105,6 +107,8 @@ class SmsTransaction:
             "confidence": self.confidence,
             "sms_id": self.sms_id,
             "sender": self.sender,
+            "bank_name": self.bank_name,
+            "account_last_four": self.account_last_four,
         }
 
 
@@ -116,6 +120,10 @@ class SmsTransactionExtractorAgent:
         self.categories = list(DEFAULT_CATEGORIES)
         self._categories_cache = ", ".join(self.categories)
         self._system_message = self._get_system_message()
+        
+        # Initialize account extractor for A2A coordination
+        from agent.account_extractor import AccountExtractorAgent
+        self.account_extractor = AccountExtractorAgent()
         
         self.agent = Agent(
             model="gemini-2.5-flash",
@@ -195,7 +203,7 @@ Be precise with amounts and dates. Extract all relevant information from the SMS
             timestamp: SMS received timestamp
 
         Returns:
-            SmsTransaction object with extracted information, or None if parsing fails
+            SmsTransaction object with extracted information (including account info), or None if parsing fails
         """
         try:
             # First try the LLM model
@@ -207,6 +215,17 @@ Be precise with amounts and dates. Extract all relevant information from the SMS
                 transaction_data = self._parse_with_regex(sms_body, sender, timestamp)
 
             if transaction_data:
+                # Extract account information using A2A coordination
+                account_info = self.account_extractor.extract_account_info(
+                    message_text=sms_body,
+                    sender_email=None,
+                    sender_sms=sender
+                )
+                
+                # Add account info to transaction data
+                transaction_data['bank_name'] = account_info.bank_name
+                transaction_data['account_last_four'] = account_info.account_last_four
+                
                 # Create and return SmsTransaction object
                 return self._create_transaction(transaction_data, sms_id, sender)
         except Exception as e:
@@ -380,6 +399,8 @@ Be precise with amounts and dates. Extract all relevant information from the SMS
                 confidence=data.get("confidence", 0.85),  # Lower confidence for SMS
                 sms_id=sms_id,
                 sender=sender,
+                bank_name=data.get("bank_name"),
+                account_last_four=data.get("account_last_four"),
             )
         except (KeyError, ValueError) as e:
             print(f"Error creating transaction: {e}")

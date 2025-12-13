@@ -85,6 +85,7 @@ class EmailProcessingCoordinator:
         message_id: str,
         subject: str,
         body: str,
+        sender_email: Optional[str] = None,
     ) -> EmailProcessingResult:
         """
         Process email using A2A coordination pattern
@@ -92,14 +93,16 @@ class EmailProcessingCoordinator:
         Step 1: Intent Classification (Agent 1)
         Step 2: Decision Logic (Coordinator)
         Step 3: Transaction Extraction (Agent 2) - only if approved
+        Step 4: Account Extraction (Agent 3) - coordinated within Agent 2
         
         Args:
             message_id: Unique email message ID
             subject: Email subject line
             body: Email body content
+            sender_email: Optional sender email for account extraction
             
         Returns:
-            EmailProcessingResult with classification and optional transaction
+            EmailProcessingResult with classification, transaction, and account info
         """
         logger.info(f"[A2A] Processing email {message_id}")
         
@@ -125,17 +128,23 @@ class EmailProcessingCoordinator:
                 skip_reason=skip_reason,
             )
         
-        # STEP 3: Agent 2 - Transaction Extraction
+        # STEP 3: Agent 2 - Transaction Extraction (includes Account Extraction via A2A)
         logger.info(f"[A2A] Step 2: Approved for extraction, invoking Transaction Extractor Agent")
         
         try:
-            transaction = self.transaction_extractor.parse_email(message_id, subject, body)
+            # Transaction extractor now coordinates with Account Extractor internally
+            transaction = self.transaction_extractor.parse_email(message_id, subject, body, sender_email)
             
             if transaction:
                 logger.info(
                     f"[A2A] Step 3: Successfully extracted transaction: "
                     f"{transaction.amount} {transaction.transaction_type}"
                 )
+                if transaction.bank_name or transaction.account_last_four:
+                    logger.info(
+                        f"[A2A] Step 4: Account info extracted: "
+                        f"{transaction.bank_name or 'Unknown'} - {transaction.account_last_four or 'N/A'}"
+                    )
                 return EmailProcessingResult(
                     intent_classification=intent_classification,
                     transaction=transaction,
@@ -224,15 +233,16 @@ class SmsProcessingCoordinator:
         Step 1: Intent Classification (Agent 1)
         Step 2: Decision Logic (Coordinator)
         Step 3: Transaction Extraction (Agent 2) - only if approved
+        Step 4: Account Extraction (Agent 3) - coordinated within Agent 2
         
         Args:
             sms_id: Unique SMS identifier
             sms_body: SMS message body
-            sender: SMS sender (e.g., bank short code)
+            sender: SMS sender (e.g., bank short code) - used for account extraction
             timestamp: SMS received timestamp
             
         Returns:
-            SmsProcessingResult with classification and optional transaction
+            SmsProcessingResult with classification, transaction, and account info
         """
         logger.info(f"[A2A-SMS] Processing SMS {sms_id}")
         
@@ -262,10 +272,11 @@ class SmsProcessingCoordinator:
                 skip_reason=skip_reason,
             )
         
-        # STEP 3: Agent 2 - SMS Transaction Extraction
+        # STEP 3: Agent 2 - SMS Transaction Extraction (includes Account Extraction via A2A)
         logger.info(f"[A2A-SMS] Step 2: Approved for extraction, invoking SMS Transaction Extractor Agent")
         
         try:
+            # SMS transaction extractor now coordinates with Account Extractor internally
             transaction = self.sms_extractor.parse_sms(
                 sms_id=sms_id,
                 sms_body=sms_body,
@@ -278,6 +289,11 @@ class SmsProcessingCoordinator:
                     f"[A2A-SMS] Step 3: Successfully extracted transaction: "
                     f"{transaction.amount} {transaction.transaction_type}"
                 )
+                if transaction.bank_name or transaction.account_last_four:
+                    logger.info(
+                        f"[A2A-SMS] Step 4: Account info extracted: "
+                        f"{transaction.bank_name or 'Unknown'} - {transaction.account_last_four or 'N/A'}"
+                    )
                 return SmsProcessingResult(
                     intent_classification=intent_classification,
                     transaction=transaction,

@@ -93,12 +93,12 @@ The API will be available at `http://localhost:8000`
 
 See `.env.example` for default values.
 
-## API Documentation
+## Documentation
 
-Once the application is running, you can access:
-
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+- **System Documentation**: See [`SYSTEM_DOCUMENTATION.md`](SYSTEM_DOCUMENTATION.md) for comprehensive architecture, multi-agent system, API reference, and deployment guide
+- **API Documentation**: 
+  - Swagger UI: `http://localhost:8000/docs`
+  - ReDoc: `http://localhost:8000/redoc`
 
 ## Development
 
