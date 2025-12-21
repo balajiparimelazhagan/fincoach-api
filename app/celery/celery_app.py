@@ -41,6 +41,7 @@ celery_app.conf.beat_schedule = {
 # Task routes (optional - for routing specific tasks to specific queues)
 celery_app.conf.task_routes = {
     'app.celery.celery_tasks.fetch_user_emails_initial': {'queue': 'email_processing'},
+    'app.celery.celery_tasks.process_monthly_email_job': {'queue': 'email_processing'},
     'app.celery.celery_tasks.fetch_user_emails_incremental': {'queue': 'email_processing'},
     'app.celery.celery_tasks.schedule_incremental_sync': {'queue': 'scheduling'},
 }

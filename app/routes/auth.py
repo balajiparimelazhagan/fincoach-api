@@ -184,6 +184,16 @@ async def google_callback(
         )
 
         logger.info(f"New user created with tokens: {email}")
+        
+        # Trigger initial email sync with monthly batching (3 months)
+        try:
+            from app.celery.celery_tasks import fetch_user_emails_initial
+            fetch_user_emails_initial.delay(str(new_user.id), 3)
+            logger.info(f"Triggered initial email sync for new user: {email}")
+        except Exception as sync_error:
+            logger.error(f"Failed to trigger initial email sync for user {email}: {sync_error}")
+            # Don't fail user creation if sync fails
+        
         # Redirect to frontend dashboard with token
         redirect_url = f"{settings.FRONTEND_BASE_URL}{settings.FORNTEND_LOGIN_REDIRECT_PATH}?{urlencode({'token': jwt_token})}"
         return RedirectResponse(url=redirect_url)

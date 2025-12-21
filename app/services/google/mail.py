@@ -113,7 +113,8 @@ class GmailService:
     def fetch_bank_emails(
         self, 
         max_results: Optional[int] = 10, 
-        since_date: Optional[datetime] = None, 
+        since_date: Optional[datetime] = None,
+        until_date: Optional[datetime] = None,
         query: Optional[str] = None, 
         ascending: bool = False, 
         chunk_days: int = 7
@@ -125,6 +126,7 @@ class GmailService:
             max_results: Maximum number of emails to fetch. If None, fetches all available.
             since_date: Optional datetime; messages newer than this date will be fetched. 
                         Internally uses epoch seconds for `after`/`before` filters.
+            until_date: Optional datetime; messages older than this date will be fetched.
             query: Optional full Gmail `q` string. If provided, overrides default bank keywords.
             ascending: If True, fetch results oldest-first by querying successive date windows.
             chunk_days: When ascending is True, the number of days per query chunk.
@@ -146,9 +148,9 @@ class GmailService:
 
             # Choose between ascending (date-chunked) or standard fetch
             if ascending:
-                return self._fetch_ascending_order(base_query, max_results, since_date, chunk_days)
+                return self._fetch_ascending_order(base_query, max_results, since_date, until_date, chunk_days)
             else:
-                return self._fetch_standard_order(base_query, max_results, since_date)
+                return self._fetch_standard_order(base_query, max_results, since_date, until_date)
         
         except Exception as e:
             logger.error(f"Error fetching emails: {e}")
@@ -158,14 +160,15 @@ class GmailService:
         self, 
         base_query: str, 
         max_results: Optional[int], 
-        since_date: Optional[datetime], 
+        since_date: Optional[datetime],
+        until_date: Optional[datetime],
         chunk_days: int
     ) -> List[Tuple[str, str, str, datetime, str]]:
         """Fetch emails in ascending order (oldest first) using date chunks."""
         
         # Set date range: default to 6 months ago if not provided
         start_date = since_date or (datetime.now(timezone.utc) - timedelta(days=180))
-        end_date = datetime.now(timezone.utc)
+        end_date = until_date or datetime.now(timezone.utc)
         chunk_days = max(1, chunk_days)  # Enforce minimum chunk size
         
         emails = []
@@ -214,7 +217,8 @@ class GmailService:
         self, 
         base_query: str, 
         max_results: Optional[int], 
-        since_date: Optional[datetime]
+        since_date: Optional[datetime],
+        until_date: Optional[datetime]
     ) -> List[Tuple[str, str, str, datetime, str]]:
         """Fetch emails using standard query (newest first)."""
         
@@ -223,6 +227,9 @@ class GmailService:
         if since_date:
             after_timestamp = int(since_date.replace(tzinfo=timezone.utc).timestamp())
             query = f"{base_query} after:{after_timestamp}"
+        if until_date:
+            before_timestamp = int(until_date.replace(tzinfo=timezone.utc).timestamp())
+            query = f"{query} before:{before_timestamp}"
         
         # Fetch message IDs from Gmail
         messages = fetch_messages_paginated(self.service, query, max_results)
