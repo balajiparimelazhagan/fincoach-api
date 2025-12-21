@@ -1,0 +1,27 @@
+"""add label to transactors
+
+Revision ID: 024
+Revises: 023
+Create Date: 2025-12-21 00:00:00.000000
+
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+# revision identifiers, used by Alembic.
+revision: str = '024'
+down_revision: Union[str, None] = '023'
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    # Add label column to transactors table
+    op.add_column('transactors', sa.Column('label', sa.String(), nullable=True))
+
+
+def downgrade() -> None:
+    # Remove label column from transactors table
+    op.drop_column('transactors', 'label')

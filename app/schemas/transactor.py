@@ -6,6 +6,7 @@ class TransactorBase(BaseModel):
     name: str
     source_id: Optional[str] = None
     picture: Optional[str] = None
+    label: Optional[str] = None
 
 
 class TransactorCreate(TransactorBase):
@@ -16,6 +17,7 @@ class TransactorUpdate(BaseModel):
     name: Optional[str] = None
     source_id: Optional[str] = None
     picture: Optional[str] = None
+    label: Optional[str] = None
 
 
 class TransactorResponse(TransactorBase):

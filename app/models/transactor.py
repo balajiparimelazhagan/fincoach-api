@@ -13,6 +13,7 @@ class Transactor(Base):
     user_id = Column(UUID(as_uuid=False), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     source_id = Column(String, nullable=True)
     picture = Column(String, nullable=True)
+    label = Column(String, nullable=True)
     
     # Relationship
     user = relationship("User", backref="transactors")
