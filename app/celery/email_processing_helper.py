@@ -1,3 +1,5 @@
+class DuplicateMessageIDError(Exception):
+    pass
 """
 Email processing helper functions for Celery tasks.
 Contains core async logic for email fetching and transaction extraction.
@@ -105,9 +107,9 @@ async def create_monthly_sync_jobs(user_id: str, num_months: int = 3) -> List[st
                 user_id=user_id,
                 status=JobStatus.PENDING,
                 is_initial=True,
-                month_start_date=month_start,
-                month_end_date=month_end,
-                month_sequence=sequence,
+                start_date=month_start,
+                end_date=month_end,
+                batch_sequence=sequence,
                 created_at=datetime.utcnow()
             )
             session.add(job)
@@ -144,12 +146,12 @@ async def trigger_next_monthly_job(session, user_id: str, completed_sequence: in
             is_initial=True,
             status=JobStatus.PENDING
         )
-        .filter(EmailTransactionSyncJob.month_sequence > completed_sequence)
-        .order_by(EmailTransactionSyncJob.month_sequence.asc())
+        .filter(EmailTransactionSyncJob.batch_sequence > completed_sequence)
+        .order_by(EmailTransactionSyncJob.batch_sequence.asc())
     )).scalars().first()
     
     if next_job:
-        logger.info(f"Triggering next monthly job (sequence {next_job.month_sequence}) for user {user_id}")
+        logger.info(f"Triggering next monthly job (sequence {next_job.batch_sequence}) for user {user_id}")
         
         # Import here to avoid circular dependency
         from app.celery.celery_tasks import process_monthly_email_job
@@ -245,11 +247,11 @@ async def fetch_user_emails_async(user_id: str, job_id: str = None):
             coordinator = EmailProcessingCoordinator()
             
             # Determine date range based on sync type
-            if job.is_initial and job.month_start_date and job.month_end_date:
+            if job.is_initial and job.start_date and job.end_date:
                 # Monthly batched sync: use job's month boundaries
-                since_date = datetime.combine(job.month_start_date, datetime.min.time()).replace(tzinfo=timezone.utc)
-                until_date = datetime.combine(job.month_end_date, datetime.max.time()).replace(tzinfo=timezone.utc)
-                logger.info(f"Monthly batch sync for user {user_id}, month {job.month_sequence}: {job.month_start_date} to {job.month_end_date}")
+                since_date = datetime.combine(job.start_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+                until_date = datetime.combine(job.end_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+                logger.info(f"Monthly batch sync for user {user_id}, month {job.batch_sequence}: {job.start_date} to {job.end_date}")
                 
                 # Fetch emails for this month
                 all_emails = fetcher.fetch_bank_emails(
@@ -320,25 +322,27 @@ async def fetch_user_emails_async(user_id: str, job_id: str = None):
             # Clear processed_message_ids to save space (keep counts for stats)
             job.processed_message_ids = None
             
-            # Update last fetch time only for incremental syncs (not for monthly initial syncs)
-            if not job.is_initial:
-                # Update last fetch time to the latest email date to enable incremental fetching
-                if all_emails:
-                    try:
-                        email_dates = [e[3] for e in all_emails if len(e) >= 4 and isinstance(e[3], datetime)]
-                        if email_dates:
-                            user.last_email_fetch_time = max(email_dates)
-                    except Exception:
-                        # Keep existing last_email_fetch_time on parse errors
-                        logger.warning(f"Failed to compute latest email date for user {user_id}, keeping previous last_email_fetch_time: {user.last_email_fetch_time}")
+            # Update user's last_email_fetch_time to enable incremental fetching
+            # This applies to both initial syncs (after each batch) and incremental syncs
+            if all_emails:
+                try:
+                    email_dates = [e[3] for e in all_emails if len(e) >= 4 and isinstance(e[3], datetime)]
+                    if email_dates:
+                        latest_email_date = max(email_dates)
+                        # Update if this is the first fetch (null) or if we found a more recent email
+                        if user.last_email_fetch_time is None or latest_email_date > user.last_email_fetch_time:
+                            user.last_email_fetch_time = latest_email_date
+                            logger.info(f"Updated user.last_email_fetch_time to {latest_email_date} for user {user_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to update last_email_fetch_time for user {user_id}: {e}")
             
             await session.commit()
             
             logger.info(f"✅ Completed email transaction sync for user {user_id}: {job.parsed_transactions} transactions parsed from {job.total_emails} emails")
             
             # If this was a monthly job, trigger the next month
-            if job.is_initial and job.month_sequence:
-                await trigger_next_monthly_job(session, user_id, job.month_sequence)
+            if job.is_initial and job.batch_sequence:
+                await trigger_next_monthly_job(session, user_id, job.batch_sequence)
             
             return {
                 "status": "success",
@@ -519,23 +523,34 @@ async def process_email_batch(session, emails: List, coordinator: EmailProcessin
                 )
             
             # Create transaction
-            db_transaction = DBTransaction(
-                amount=transaction.amount,
-                type=transaction.transaction_type.value,
-                date=datetime.strptime(transaction.date, "%Y-%m-%d %H:%M:%S"),
-                description=transaction.description,
-                confidence=str(transaction.confidence),
-                user_id=user_id,
-                category_id=category.id,
-                transactor_id=transactor.id,
-                currency_id=currency.id,
-                message_id=message_id,
-                account_id=account.id if account else None
-            )
-            session.add(db_transaction)
-            
-            # Commit transaction immediately
-            await session.commit()
+            # Check for duplicate message_id before insert
+            existing_txn = (await session.execute(
+                select(DBTransaction).filter_by(message_id=message_id)
+            )).scalar_one_or_none()
+            if existing_txn:
+                logger.info(f"Duplicate transaction for message_id {message_id}, skipping insert.")
+                job.processed_message_ids[message_id] = True
+                job.skipped_emails += 1
+                job.processed_emails = len(job.processed_message_ids)
+                flag_modified(job, "processed_message_ids")
+                await session.commit()
+            else:
+                db_transaction = DBTransaction(
+                    amount=transaction.amount,
+                    type=transaction.transaction_type.value,
+                    date=datetime.strptime(transaction.date, "%Y-%m-%d %H:%M:%S"),
+                    description=transaction.description,
+                    confidence=str(transaction.confidence),
+                    user_id=user_id,
+                    category_id=category.id,
+                    transactor_id=transactor.id,
+                    currency_id=currency.id,
+                    message_id=message_id,
+                    account_id=account.id if account else None
+                )
+                session.add(db_transaction)
+                # Commit transaction immediately
+                await session.commit()
             
             # Mark as successfully processed and update progress
             job.processed_message_ids[message_id] = True
@@ -550,7 +565,7 @@ async def process_email_batch(session, emails: List, coordinator: EmailProcessin
             
         except IntegrityError as e:
             # Duplicate message_id - this email was already processed in transactions table
-            # Mark as processed to avoid retrying
+            # Mark as processed to avoid retrying and raise a custom error to prevent Celery retry
             await session.rollback()
             job.processed_message_ids[message_id] = True
             job.skipped_emails += 1
@@ -558,7 +573,7 @@ async def process_email_batch(session, emails: List, coordinator: EmailProcessin
             flag_modified(job, "processed_message_ids")
             await session.commit()  # Commit JSONB update
             logger.debug(f"Skipping duplicate transaction for message_id {message_id}")
-            continue
+            raise DuplicateMessageIDError(f"Duplicate message_id: {message_id}")
             
         except Exception as e:
             # Any other error - rollback and continue with next email

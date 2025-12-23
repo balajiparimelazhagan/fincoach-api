@@ -47,7 +47,7 @@ async def start_email_transaction_sync(
         old_jobs = (await session.execute(
             select(EmailTransactionSyncJob)
             .filter_by(user_id=user_id)
-            .filter(EmailTransactionSyncJob.month_sequence.is_(None))
+            .filter(EmailTransactionSyncJob.batch_sequence.is_(None))
         )).scalars().all()
         
         if old_jobs:
@@ -60,7 +60,7 @@ async def start_email_transaction_sync(
     stuck_jobs = (await session.execute(
         select(EmailTransactionSyncJob)
         .filter_by(user_id=user_id, status=JobStatus.PROCESSING)
-        .filter(EmailTransactionSyncJob.month_sequence.is_(None))
+        .filter(EmailTransactionSyncJob.batch_sequence.is_(None))
     )).scalars().all()
     
     if stuck_jobs:
@@ -74,7 +74,7 @@ async def start_email_transaction_sync(
     existing_initial_jobs = (await session.execute(
         select(EmailTransactionSyncJob)
         .filter_by(user_id=user_id, is_initial=True)
-        .filter(EmailTransactionSyncJob.month_sequence.isnot(None))
+        .filter(EmailTransactionSyncJob.batch_sequence.isnot(None))
         .order_by(EmailTransactionSyncJob.created_at.desc())
     )).scalars().all()
     
@@ -126,8 +126,8 @@ async def get_email_transaction_sync_status(
     monthly_jobs = (await session.execute(
         select(EmailTransactionSyncJob)
         .filter_by(user_id=user_id, is_initial=True)
-        .filter(EmailTransactionSyncJob.month_sequence.isnot(None))
-        .order_by(EmailTransactionSyncJob.month_sequence.asc())
+        .filter(EmailTransactionSyncJob.batch_sequence.isnot(None))
+        .order_by(EmailTransactionSyncJob.batch_sequence.asc())
     )).scalars().all()
     
     if monthly_jobs:
@@ -136,9 +136,9 @@ async def get_email_transaction_sync_status(
         for job in monthly_jobs:
             jobs_status.append({
                 "job_id": str(job.id),
-                "month_sequence": job.month_sequence,
-                "month_start": job.month_start_date.isoformat() if job.month_start_date else None,
-                "month_end": job.month_end_date.isoformat() if job.month_end_date else None,
+                "batch_sequence": job.batch_sequence,
+                "start_date": job.start_date.isoformat() if job.start_date else None,
+                "end_date": job.end_date.isoformat() if job.end_date else None,
                 "status": job.status.value,
                 "progress": round(job.progress_percentage, 2),
                 "total_emails": job.total_emails,
@@ -286,7 +286,7 @@ async def cleanup_old_jobs(
     old_jobs = (await session.execute(
         select(EmailTransactionSyncJob)
         .filter_by(user_id=user_id)
-        .filter(EmailTransactionSyncJob.month_sequence.is_(None))
+        .filter(EmailTransactionSyncJob.batch_sequence.is_(None))
     )).scalars().all()
     
     if not old_jobs:
