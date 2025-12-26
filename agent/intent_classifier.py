@@ -154,8 +154,6 @@ EMAIL TO CLASSIFY:
             # Override should_extract if confidence is too low
             if confidence < 0.7:
                 should_extract = False
-
-            print("Intent Classification Result:", intent, confidence, reasoning, email_content)
             
             return IntentClassification(
                 intent=intent,

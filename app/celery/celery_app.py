@@ -34,7 +34,11 @@ celery_app.conf.update(
 celery_app.conf.beat_schedule = {
     'incremental-email-sync': {
         'task': 'app.celery.celery_tasks.schedule_incremental_sync',
-        'schedule': crontab(minute='*/2'),  # Every 30 minutes
+        'schedule': crontab(minute='*/2'),  # Every 2 minutes (example)
+    },
+    'scheduled-spending-analysis': {
+        'task': 'app.celery.celery_tasks.schedule_spending_analysis',
+        'schedule': crontab(minute='*/1'),  # Every 30 minutes
     },
 }
 
@@ -44,4 +48,6 @@ celery_app.conf.task_routes = {
     'app.celery.celery_tasks.process_monthly_email_job': {'queue': 'email_processing'},
     'app.celery.celery_tasks.fetch_user_emails_incremental': {'queue': 'email_processing'},
     'app.celery.celery_tasks.schedule_incremental_sync': {'queue': 'scheduling'},
+    'app.celery.celery_tasks.analyze_spending_patterns': {'queue': 'spending_analysis'},
+    'app.celery.celery_tasks.schedule_spending_analysis': {'queue': 'spending_analysis'},
 }
