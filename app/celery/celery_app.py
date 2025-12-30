@@ -38,7 +38,11 @@ celery_app.conf.beat_schedule = {
     },
     'scheduled-spending-analysis': {
         'task': 'app.celery.celery_tasks.schedule_spending_analysis',
-        'schedule': crontab(minute='*/1'),  # Every 30 minutes
+        'schedule': crontab(minute='*/60'),  # Every 30 minutes
+    },
+    'cleanup-stale-email-jobs': {
+        'task': 'app.celery.celery_tasks.cleanup_stale_email_sync_jobs',
+        'schedule': crontab(minute='*/30'),  # Every 30 minutes
     },
 }
 

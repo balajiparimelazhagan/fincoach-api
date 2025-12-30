@@ -26,6 +26,9 @@ class PatternAnalysisResult:
     pattern_detected: bool
     pattern_type: Optional[str] = None
     frequency: Optional[str] = None
+    interval_days: Optional[int] = None  # Numeric interval in days
+    amount_behavior: Optional[str] = None  # FIXED, VARIABLE, HIGHLY_VARIABLE
+    direction: Optional[str] = None  # DEBIT, CREDIT
     confidence: float = 0.0
     avg_amount: Optional[Decimal] = None
     min_amount: Optional[Decimal] = None
@@ -45,6 +48,9 @@ class PatternAnalysisResult:
             "pattern_detected": self.pattern_detected,
             "pattern_type": self.pattern_type,
             "frequency": self.frequency,
+            "interval_days": self.interval_days,
+            "amount_behavior": self.amount_behavior,
+            "direction": self.direction,
             "confidence": round(self.confidence, 3),
             "avg_amount": float(self.avg_amount) if self.avg_amount else None,
             "min_amount": float(self.min_amount) if self.min_amount else None,
@@ -120,6 +126,7 @@ class SpendingAnalysisCoordinator:
         self,
         transactor_id: str,
         transactor_name: str,
+        direction: str,
         transactions: List[dict],
         min_occurrences: int = 3,
     ) -> PatternAnalysisResult:
@@ -134,13 +141,14 @@ class SpendingAnalysisCoordinator:
         Args:
             transactor_id: UUID of transactor
             transactor_name: Name of transactor
+            direction: DEBIT or CREDIT (from transaction type)
             transactions: List of {date, amount} dicts
             min_occurrences: Minimum periods needed for recurring pattern
         
         Returns:
             PatternAnalysisResult with detailed analysis
         """
-        logger.info(f"[A2A] Analyzing patterns for transactor: {transactor_name}")
+        logger.info(f"[A2A] Analyzing patterns for transactor: {transactor_name}, direction: {direction}")
         
         try:
             # STEP 1: Agent 1 - Period Bucketing
@@ -229,12 +237,23 @@ class SpendingAnalysisCoordinator:
             first_date = min((t['date'] for t in transactions), default=None)
             last_date = max((t['date'] for t in transactions), default=None)
             now = datetime.utcnow()
+            
+            # Determine amount_behavior from analysis
+            amount_behavior = "FIXED"
+            if amount_analysis.is_highly_variable:
+                amount_behavior = "HIGHLY_VARIABLE"
+            elif amount_analysis.is_variable_amount:
+                amount_behavior = "VARIABLE"
+            
             return PatternAnalysisResult(
                 transactor_id=transactor_id,
                 transactor_name=transactor_name,
                 pattern_detected=True,
                 pattern_type=pattern_result.pattern_type,
                 frequency=pattern_result.frequency,
+                interval_days=pattern_result.interval_days,
+                amount_behavior=amount_behavior,
+                direction=direction,  # From parameter
                 confidence=confidence_scores.overall_confidence,
                 avg_amount=amount_analysis.avg_amount,
                 min_amount=amount_analysis.min_amount,

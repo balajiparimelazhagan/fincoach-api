@@ -9,6 +9,7 @@ from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
 
 from app.db import AsyncSessionLocal
+from app.services.transaction_handler import handle_new_transaction
 from app.models.user import User
 from app.models.sms_transaction_sync_job import SmsTransactionSyncJob, JobStatus as SmsJobStatus
 from app.models.transaction import Transaction as DBTransaction
@@ -229,6 +230,9 @@ async def process_sms_messages(
             
             # Commit immediately after each transaction
             await session.commit()
+            
+            # impl_2.md Task B: Queue streak update on every new transaction
+            await handle_new_transaction(db_transaction)
             
             job.parsed_transactions += 1
             logger.info(

@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db
 from app.services.spending_analysis_service import SpendingAnalysisService
 from app.models import SpendingAnalysisJob, RecurringPattern
-from app.celery.celery_tasks import analyze_spending_patterns
+from app.celery.celery_tasks import detect_or_update_recurring_pattern
 from uuid import UUID
 
 router = APIRouter()
@@ -12,7 +12,7 @@ router = APIRouter()
 async def trigger_spending_analysis(user_id: UUID, db: AsyncSession = Depends(get_db)):
     service = SpendingAnalysisService(db)
     job = await service.create_job(user_id=user_id, triggered_by='MANUAL')
-    analyze_spending_patterns.delay(str(user_id), str(job.id))
+    detect_or_update_recurring_pattern.delay(str(user_id), str(job.id))
     return {"job_id": str(job.id), "status": job.status, "message": "Spending analysis job triggered successfully."}
 
 @router.get("/api/v1/analytics/spending-patterns/jobs/{job_id}")

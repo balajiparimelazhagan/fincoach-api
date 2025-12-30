@@ -16,8 +16,9 @@ logger = logging.getLogger(__name__)
 class PatternDetectionResult:
     """Result of pattern detection"""
     is_recurring: bool
-    pattern_type: Optional[str] = None  # "fixed_monthly", "variable_monthly", etc.
-    frequency: Optional[str] = None  # "monthly", "bi-monthly", "quarterly"
+    pattern_type: Optional[str] = None  # "MONTHLY", "QUARTERLY", "WEEKLY", etc. (enum values)
+    frequency: Optional[str] = None  # "monthly", "bi-monthly", "quarterly" (deprecated, use interval_days)
+    interval_days: Optional[int] = None  # Numeric interval in days (30 for monthly, 90 for quarterly)
     reasoning: str = ""
     required_occurrences: int = 3  # Minimum transactions needed
     actual_occurrences: int = 0  # Actual recurring transactions found
@@ -27,6 +28,7 @@ class PatternDetectionResult:
             "is_recurring": self.is_recurring,
             "pattern_type": self.pattern_type,
             "frequency": self.frequency,
+            "interval_days": self.interval_days,
             "reasoning": self.reasoning,
             "actual_occurrences": self.actual_occurrences,
         }
@@ -97,13 +99,16 @@ Respond with clear reasoning about whether a pattern exists and what type it is.
     ) -> PatternDetectionResult:
         """
         Detect recurring patterns from bucket analysis.
+        - Input: Signals only (bucket_analysis)
+        - Output: pattern_type enum + interval_days (numeric)
+        - NO: Complex confidence, amounts, explanations
         
         Args:
             bucket_analysis: Output from PeriodBucketingAgent.analyze_bucket_distribution()
             min_occurrences: Minimum occurrences required for recurring pattern
         
         Returns:
-            PatternDetectionResult
+            PatternDetectionResult with pattern_type and interval_days
         """
         total_periods = bucket_analysis.get("total_periods", 0)
         consecutive_periods = bucket_analysis.get("consecutive_periods", 0)
@@ -126,35 +131,35 @@ Respond with clear reasoning about whether a pattern exists and what type it is.
                 required_occurrences=min_occurrences,
             )
         
-        # Detect pattern type based on distribution
+        # Detect pattern type and interval_days based on distribution
         pattern_type = None
         frequency = None
+        interval_days = None
         
-        if distribution == "perfect_monthly":
-            pattern_type = "fixed_monthly" if consecutive_periods >= min_occurrences else "variable_monthly"
+        if distribution == "perfect_monthly" or distribution == "monthly_with_gaps":
+            pattern_type = "MONTHLY"
             frequency = "monthly"
-            reasoning = f"Perfect monthly pattern with {consecutive_periods} consecutive periods"
-        
-        elif distribution == "monthly_with_gaps":
-            pattern_type = "flexible_monthly"
-            frequency = "monthly"
-            reasoning = f"Monthly pattern detected with {total_periods} periods and {len(bucket_analysis.get('gaps', []))} gaps"
+            interval_days = 30  # Default monthly
+            reasoning = f"Monthly pattern detected with {total_periods} periods"
         
         elif distribution == "bi_monthly":
-            pattern_type = "variable_monthly"
+            pattern_type = "MONTHLY"  # Biweekly could be weekly, use BIWEEKLY if available
             frequency = "bi-monthly"
-            reasoning = "Bi-monthly pattern detected (gaps of 2 months)"
+            interval_days = 60  # ~2 months
+            reasoning = "Bi-monthly pattern detected (intervals of ~2 months)"
         
         elif distribution == "quarterly":
-            pattern_type = "variable_monthly"
+            pattern_type = "QUARTERLY"
             frequency = "quarterly"
-            reasoning = "Quarterly pattern detected (gaps of 3 months)"
+            interval_days = 90
+            reasoning = "Quarterly pattern detected (intervals of ~3 months)"
         
         elif distribution == "irregular_intervals":
             # Check if it's still recurring despite irregular gaps
             if consecutive_periods >= min_occurrences:
-                pattern_type = "flexible_monthly"
+                pattern_type = "MONTHLY"
                 frequency = "monthly"
+                interval_days = 30
                 reasoning = f"Flexible monthly pattern with {consecutive_periods} consecutive occurrences"
             else:
                 return PatternDetectionResult(
@@ -182,7 +187,10 @@ Respond with clear reasoning about whether a pattern exists and what type it is.
             required_occurrences=min_occurrences,
         )
         
-        logger.info(f"Pattern detected: {result.pattern_type} with frequency {result.frequency}")
+        # Store interval_days for DB persistence
+        result.interval_days = interval_days
+        
+        logger.info(f"Pattern detected: {result.pattern_type} with interval {interval_days} days")
         
         return result
     

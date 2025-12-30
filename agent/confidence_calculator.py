@@ -242,6 +242,28 @@ Always ensure final confidence is between 0.0 and 1.0."""
         else:
             return 0.30
     
+    def calculate_final_confidence(
+        self,
+        base_confidence: float,
+        confidence_multiplier: float = 1.0
+    ) -> float:
+        """
+        Apply streak multiplier to base confidence.
+        
+        impl_2.md formula:
+        final_confidence = base_confidence * confidence_multiplier
+        
+        Args:
+            base_confidence: Score from calculate_confidence (0-1)
+            confidence_multiplier: Streak health multiplier (0-1)
+        
+        Returns:
+            Final confidence score (0-1), clamped
+        """
+        final = base_confidence * confidence_multiplier
+        # Clamp to [0, 1]
+        return max(0.0, min(1.0, final))
+    
     def _get_pattern_strength(self, pattern_type: str) -> float:
         """Get inherent strength of pattern type"""
         pattern_strengths = {

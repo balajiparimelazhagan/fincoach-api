@@ -1,5 +1,3 @@
-class DuplicateMessageIDError(Exception):
-    pass
 """
 Email processing helper functions for Celery tasks.
 Contains core async logic for email fetching and transaction extraction.
@@ -13,6 +11,11 @@ from sqlalchemy.orm.attributes import flag_modified
 from calendar import monthrange
 
 from app.db import AsyncSessionLocal
+from app.services.transaction_handler import handle_new_transaction
+
+
+class DuplicateMessageIDError(Exception):
+    pass
 from app.models.user import User
 from app.models.email_transaction_sync_job import EmailTransactionSyncJob, JobStatus
 from app.models.transaction import Transaction as DBTransaction
@@ -551,6 +554,9 @@ async def process_email_batch(session, emails: List, coordinator: EmailProcessin
                 session.add(db_transaction)
                 # Commit transaction immediately
                 await session.commit()
+                
+                # impl_2.md Task B: Queue streak update on every new transaction
+                await handle_new_transaction(db_transaction)
             
             # Mark as successfully processed and update progress
             job.processed_message_ids[message_id] = True

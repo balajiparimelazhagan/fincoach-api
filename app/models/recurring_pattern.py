@@ -1,9 +1,9 @@
 """
 Recurring Pattern Model for storing detected recurring transaction patterns.
-Stores metadata about detected patterns with confidence scores.
-Designed for future budget forecasting without pre-computed predictions.
+Stores stateful pattern metadata with confidence scores and streak tracking.
+Immutable: detection output; Mutable: status, confidence (after streak calc), last_evaluated_at.
 """
-from sqlalchemy import Column, String, DateTime, Numeric, Integer, Float, Index, ForeignKey
+from sqlalchemy import Column, String, DateTime, Numeric, Integer, Index, ForeignKey, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -14,31 +14,42 @@ from app.db import Base
 
 class RecurringPatternType(str):
     """Pattern type constants"""
-    FIXED_MONTHLY = "fixed_monthly"
-    VARIABLE_MONTHLY = "variable_monthly"
-    FLEXIBLE_MONTHLY = "flexible_monthly"
-    BI_MONTHLY = "bi_monthly"
-    QUARTERLY = "quarterly"
-    CUSTOM_INTERVAL = "custom_interval"
-    MULTI_MONTHLY = "multi_monthly"  # Multiple transactions per month
+    DAILY = "DAILY"
+    WEEKLY = "WEEKLY"
+    BIWEEKLY = "BIWEEKLY"
+    MONTHLY = "MONTHLY"
+    QUARTERLY = "QUARTERLY"
+    ANNUAL = "ANNUAL"
+
+
+class RecurringPatternStatus(str):
+    """Pattern status constants"""
+    ACTIVE = "ACTIVE"
+    PAUSED = "PAUSED"
+    BROKEN = "BROKEN"
+
+
+class AmountBehavior(str):
+    """Amount behavior constants"""
+    FIXED = "FIXED"
+    VARIABLE = "VARIABLE"
 
 
 class RecurringPattern(Base):
     """
     Model for detected recurring transaction patterns.
     
-    Stores pattern metadata without pre-computed forecasts.
-    Forecasting can query this data later when needed.
+    STATEFUL: Represents "this recurring thing exists and is being tracked"
     
-    Example:
-        Transactor: "TNEB Chennai" (electricity)
-        Pattern Type: "variable_monthly"
-        Frequency: "monthly"
-        Confidence: 0.92
-        Avg Amount: 950
-        Min/Max: 800-1200
-        Occurrences: 5
-        Last Transaction: 2025-05-15
+    Immutable:
+    - id, user_id, transactor_id, direction, pattern_type, interval_days
+    - amount_behavior, detected_at, detection_version
+    
+    Mutable (by streak task):
+    - status, last_evaluated_at, confidence
+    
+    Does NOT store stats like avg_gap_days, avg_amount, etc.
+    These are recomputed on demand from transactions table.
     """
     __tablename__ = "recurring_patterns"
     
@@ -46,34 +57,24 @@ class RecurringPattern(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     transactor_id = Column(UUID(as_uuid=True), ForeignKey('transactors.id', ondelete='CASCADE'), nullable=False, index=True)
     
-    # Pattern identification
-    pattern_type = Column(String, nullable=False)  # "fixed_monthly", "variable_monthly", etc.
-    frequency = Column(String, nullable=False)  # "monthly", "bi-monthly", "quarterly", "28-day"
+    # Direction: DEBIT or CREDIT (differentiates spending from income)
+    direction = Column(String, nullable=False)  # "DEBIT" or "CREDIT"
     
-    # Confidence score (0-1) based on multiple factors
-    # Calculated by analyzing: amount consistency, date consistency, frequency consistency
-    confidence = Column(Float, nullable=False)  # 0.0 to 1.0
+    # Pattern identification (immutable after detection)
+    pattern_type = Column(String, nullable=False)  # "DAILY", "WEEKLY", "MONTHLY", etc.
+    interval_days = Column(Integer, nullable=False)  # e.g., 7 for weekly, 30 for monthly
+    amount_behavior = Column(String, nullable=False)  # "FIXED" or "VARIABLE"
     
-    # Amount analysis (in transaction currency)
-    avg_amount = Column(Numeric(precision=12, scale=2), nullable=False)
-    min_amount = Column(Numeric(precision=12, scale=2), nullable=False)
-    max_amount = Column(Numeric(precision=12, scale=2), nullable=False)
-    amount_variance_percent = Column(Float, nullable=False)  # Percentage variance from average
+    # Current state
+    status = Column(String, nullable=False, default='ACTIVE')  # "ACTIVE", "PAUSED", "BROKEN"
     
-    # Occurrence tracking
-    total_occurrences = Column(Integer, nullable=False)  # Total number of matching transactions
-    occurrences_in_pattern = Column(Integer, nullable=False)  # Transactions matching the pattern
+    # Confidence after streak multiplier applied
+    confidence = Column(Numeric(precision=4, scale=3), nullable=False)  # 0.0 to 1.0
     
-    # Date analysis
-    avg_day_of_period = Column(Integer, nullable=True)  # Average day of month (1-31) or null for variable
-    day_variance_days = Column(Integer, nullable=True)  # Std dev of days within period
-    
-    # Timeline tracking
-    first_transaction_date = Column(DateTime(timezone=True), nullable=False)
-    last_transaction_date = Column(DateTime(timezone=True), nullable=False)
-    
-    # Analysis metadata
-    analyzed_at = Column(DateTime(timezone=True), nullable=False)  # When this pattern was detected
+    # Tracking metadata
+    detected_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    last_evaluated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    detection_version = Column(Integer, nullable=False, default=1)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
@@ -82,16 +83,18 @@ class RecurringPattern(Base):
     # Relationships
     user = relationship("User", backref="recurring_patterns")
     transactor = relationship("Transactor", backref="recurring_patterns")
+    streak = relationship("RecurringPatternStreak", uselist=False, back_populates="pattern", cascade="all, delete-orphan")
     
     # Indexes for common queries
     __table_args__ = (
-        Index('ix_user_transactor', 'user_id', 'transactor_id', unique=True),  # One pattern per transactor per user
-        Index('ix_user_pattern_type', 'user_id', 'pattern_type'),
-        Index('ix_user_confidence', 'user_id', 'confidence'),  # For sorting by confidence
+        Index('uq_recurring_patterns_user_transactor_direction', 'user_id', 'transactor_id', 'direction', unique=True),
+        Index('ix_recurring_patterns_user_status', 'user_id', 'status'),
+        Index('ix_recurring_patterns_user_pattern_type', 'user_id', 'pattern_type'),
+        Index('ix_recurring_patterns_user_transactor_direction', 'user_id', 'transactor_id', 'direction'),
     )
     
     def __repr__(self):
-        return f"<RecurringPattern(transactor={self.transactor_id}, type={self.pattern_type}, confidence={self.confidence:.2f})>"
+        return f"<RecurringPattern(transactor={self.transactor_id}, direction={self.direction}, type={self.pattern_type}, confidence={self.confidence}, status={self.status})>"
     
     def to_dict(self):
         """Convert to dictionary for API responses"""
@@ -99,18 +102,15 @@ class RecurringPattern(Base):
             "id": str(self.id),
             "user_id": str(self.user_id),
             "transactor_id": str(self.transactor_id),
+            "direction": self.direction,
             "pattern_type": self.pattern_type,
-            "frequency": self.frequency,
-            "confidence": self.confidence,
-            "avg_amount": float(self.avg_amount),
-            "min_amount": float(self.min_amount),
-            "max_amount": float(self.max_amount),
-            "amount_variance_percent": self.amount_variance_percent,
-            "total_occurrences": self.total_occurrences,
-            "occurrences_in_pattern": self.occurrences_in_pattern,
-            "avg_day_of_period": self.avg_day_of_period,
-            "day_variance_days": self.day_variance_days,
-            "first_transaction_date": self.first_transaction_date.isoformat() if self.first_transaction_date else None,
-            "last_transaction_date": self.last_transaction_date.isoformat() if self.last_transaction_date else None,
-            "analyzed_at": self.analyzed_at.isoformat() if self.analyzed_at else None,
+            "interval_days": self.interval_days,
+            "amount_behavior": self.amount_behavior,
+            "status": self.status,
+            "confidence": float(self.confidence),
+            "detected_at": self.detected_at.isoformat() if self.detected_at else None,
+            "last_evaluated_at": self.last_evaluated_at.isoformat() if self.last_evaluated_at else None,
+            "detection_version": self.detection_version,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

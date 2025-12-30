@@ -15,10 +15,8 @@ class SpendingAnalysisService:
             status='PENDING',
             triggered_by=triggered_by,
             started_at=None,
-            completed_at=None,
-            total_transactors_analyzed=0,
-            patterns_detected=0,
-            job_duration_seconds=None,
+            finished_at=None,
+            error_message=None,
             error_log=[],
             celery_task_id=None,
             created_at=datetime.utcnow(),
@@ -31,20 +29,25 @@ class SpendingAnalysisService:
         await self.db.refresh(job)
         return job
 
-    async def update_job_status(self, job_id, status, error_log=None):
+    async def update_job_status(self, job_id, status, error_message=None, error_log=None):
         result = await self.db.execute(
             SpendingAnalysisJob.__table__.select().where(SpendingAnalysisJob.id == job_id)
         )
         job = result.fetchone()
         if job:
+            # Ensure status is a string
+            if hasattr(status, 'value'):
+                status = status.value
+            
             await self.db.execute(
                 SpendingAnalysisJob.__table__.update()
                 .where(SpendingAnalysisJob.id == job_id)
                 .values(
                     status=status,
+                    error_message=error_message,
                     updated_at=datetime.utcnow(),
-                    completed_at=datetime.utcnow() if status in ('COMPLETED', 'FAILED') else None,
-                    is_locked=False if status in ('COMPLETED', 'FAILED') else True,
+                    finished_at=datetime.utcnow() if status in ('SUCCESS', 'FAILED') else None,
+                    is_locked=False if status in ('SUCCESS', 'FAILED') else True,
                     error_log=error_log if error_log else job.error_log,
                 )
             )

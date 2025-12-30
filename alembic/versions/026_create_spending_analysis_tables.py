@@ -17,18 +17,18 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Create spending_analysis_jobs table (use create_type=False for enums that may already exist)
+    # Create spending_analysis_jobs table
     op.create_table(
         'spending_analysis_jobs',
         sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('status', sa.Enum('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', name='spending_analysis_job_status', create_type=False), nullable=False),
-        sa.Column('triggered_by', sa.Enum('SCHEDULED', 'MANUAL', name='spending_analysis_job_trigger', create_type=False), nullable=False),
+        sa.Column('transactor_id', postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column('direction', sa.String(), nullable=True),
+        sa.Column('status', sa.String(), nullable=False),
+        sa.Column('triggered_by', sa.String(), nullable=True),
         sa.Column('started_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('total_transactors_analyzed', sa.Integer(), nullable=False, server_default='0'),
-        sa.Column('patterns_detected', sa.Integer(), nullable=False, server_default='0'),
-        sa.Column('job_duration_seconds', sa.Float(), nullable=True),
+        sa.Column('finished_at', sa.DateTime(timezone=True), nullable=True),
+        sa.Column('error_message', sa.Text(), nullable=True),
         sa.Column('error_log', postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default='[]'),
         sa.Column('celery_task_id', sa.String(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
@@ -50,20 +50,15 @@ def upgrade() -> None:
         sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('transactor_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('direction', sa.String(), nullable=False),
         sa.Column('pattern_type', sa.String(), nullable=False),
-        sa.Column('frequency', sa.String(), nullable=False),
-        sa.Column('confidence', sa.Float(), nullable=False),
-        sa.Column('avg_amount', sa.Numeric(precision=12, scale=2), nullable=False),
-        sa.Column('min_amount', sa.Numeric(precision=12, scale=2), nullable=False),
-        sa.Column('max_amount', sa.Numeric(precision=12, scale=2), nullable=False),
-        sa.Column('amount_variance_percent', sa.Float(), nullable=False),
-        sa.Column('total_occurrences', sa.Integer(), nullable=False),
-        sa.Column('occurrences_in_pattern', sa.Integer(), nullable=False),
-        sa.Column('avg_day_of_period', sa.Integer(), nullable=True),
-        sa.Column('day_variance_days', sa.Integer(), nullable=True),
-        sa.Column('first_transaction_date', sa.DateTime(timezone=True), nullable=False),
-        sa.Column('last_transaction_date', sa.DateTime(timezone=True), nullable=False),
-        sa.Column('analyzed_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('interval_days', sa.Integer(), nullable=False),
+        sa.Column('amount_behavior', sa.String(), nullable=False),
+        sa.Column('status', sa.String(), nullable=False, server_default='ACTIVE'),
+        sa.Column('confidence', sa.Numeric(precision=4, scale=3), nullable=False),
+        sa.Column('detected_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('last_evaluated_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('detection_version', sa.Integer(), nullable=False, server_default='1'),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
@@ -71,15 +66,17 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id'),
     )
     op.create_index('ix_recurring_patterns_user_id', 'recurring_patterns', ['user_id'], unique=False)
-    op.create_index('ix_user_transactor', 'recurring_patterns', ['user_id', 'transactor_id'], unique=True)
-    op.create_index('ix_user_pattern_type', 'recurring_patterns', ['user_id', 'pattern_type'], unique=False)
-    op.create_index('ix_user_confidence', 'recurring_patterns', ['user_id', 'confidence'], unique=False)
+    op.create_index('uq_recurring_patterns_user_transactor_direction', 'recurring_patterns', ['user_id', 'transactor_id', 'direction'], unique=True)
+    op.create_index('ix_recurring_patterns_user_status', 'recurring_patterns', ['user_id', 'status'], unique=False)
+    op.create_index('ix_recurring_patterns_user_pattern_type', 'recurring_patterns', ['user_id', 'pattern_type'], unique=False)
+    op.create_index('ix_recurring_patterns_user_transactor_direction', 'recurring_patterns', ['user_id', 'transactor_id', 'direction'], unique=False)
 
 
 def downgrade() -> None:
-    op.drop_index('ix_user_confidence', table_name='recurring_patterns')
-    op.drop_index('ix_user_pattern_type', table_name='recurring_patterns')
-    op.drop_index('ix_user_transactor', table_name='recurring_patterns')
+    op.drop_index('ix_recurring_patterns_user_transactor_direction', table_name='recurring_patterns')
+    op.drop_index('ix_recurring_patterns_user_pattern_type', table_name='recurring_patterns')
+    op.drop_index('ix_recurring_patterns_user_status', table_name='recurring_patterns')
+    op.drop_index('uq_recurring_patterns_user_transactor_direction', table_name='recurring_patterns')
     op.drop_index('ix_recurring_patterns_user_id', table_name='recurring_patterns')
     op.drop_table('recurring_patterns')
     
@@ -89,7 +86,3 @@ def downgrade() -> None:
     op.drop_index('ix_spending_analysis_jobs_status', table_name='spending_analysis_jobs')
     op.drop_index('ix_spending_analysis_jobs_user_id', table_name='spending_analysis_jobs')
     op.drop_table('spending_analysis_jobs')
-    
-    # Do not drop enums here, as they may be used by other tables/migrations
-    # sa.Enum('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', name='spending_analysis_job_status', create_type=False).drop(op.get_bind())
-    # sa.Enum('SCHEDULED', 'MANUAL', name='spending_analysis_job_trigger', create_type=False).drop(op.get_bind())

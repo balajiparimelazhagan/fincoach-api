@@ -11,7 +11,9 @@ from app.models.sms_transaction_sync_job import SmsTransactionSyncJob
 from app.models.email_transaction_sync_job import EmailTransactionSyncJob
 from app.models.account import Account
 from app.models.spending_analysis_job import SpendingAnalysisJob, SpendingAnalysisJobStatus, SpendingAnalysisJobTrigger
-from app.models.recurring_pattern import RecurringPattern, RecurringPatternType
+from app.models.recurring_pattern import RecurringPattern, RecurringPatternType, RecurringPatternStatus, AmountBehavior
+from app.models.recurring_pattern_streak import RecurringPatternStreak
+from app.models.budget_forecast import BudgetForecast
 
 __all__ = [
     "Base", 
@@ -31,5 +33,10 @@ __all__ = [
     "SpendingAnalysisJobTrigger",
     "RecurringPattern",
     "RecurringPatternType",
+    "RecurringPatternStatus",
+    "AmountBehavior",
+    "RecurringPatternStreak",
+    "BudgetForecast",
 ]
+
 
