@@ -27,4 +27,4 @@ done
 echo "API ready!"
 
 echo "Starting Celery worker..."
-exec celery -A app.celery.celery_app worker --loglevel=info --concurrency=4 -Q email_processing,scheduling
+exec celery -A app.celery.celery_app worker --loglevel=info --concurrency=4 -Q spending_analysis,email_processing,scheduling,celery
