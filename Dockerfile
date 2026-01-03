@@ -8,9 +8,9 @@ WORKDIR /usr/app
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 
-# Install system dependencies (added netcat for healthchecks)
+# Install system dependencies (added netcat for healthchecks and dos2unix for CRLF handling)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends build-essential libssl-dev libffi-dev libpq-dev netcat-traditional && \
+    apt-get install -y --no-install-recommends build-essential libssl-dev libffi-dev libpq-dev netcat-traditional dos2unix && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy and install Python dependencies
@@ -22,8 +22,9 @@ RUN pip install --upgrade pip setuptools wheel && \
 # Copy project files
 COPY . /usr/app/
 
-# Set permissions for entrypoint scripts
-RUN chmod +x /usr/app/scripts/entrypoint.sh /usr/app/scripts/celery_worker_entrypoint.sh /usr/app/scripts/celery_beat_entrypoint.sh /usr/app/scripts/wait_for_db.py
+# Convert shell scripts line endings from CRLF to LF and set permissions
+RUN dos2unix /usr/app/scripts/entrypoint.sh /usr/app/scripts/celery_worker_entrypoint.sh /usr/app/scripts/celery_beat_entrypoint.sh && \
+    chmod +x /usr/app/scripts/entrypoint.sh /usr/app/scripts/celery_worker_entrypoint.sh /usr/app/scripts/celery_beat_entrypoint.sh /usr/app/scripts/wait_for_db.py
 
 # Set entrypoint
 ENTRYPOINT ["/usr/app/scripts/entrypoint.sh"]
