@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import joinedload
 from sqlalchemy import and_, or_
 
 from app.db import get_db_session
@@ -20,17 +21,35 @@ router = APIRouter(prefix="/transactions", tags=["Transactions"])
 def _serialize_transaction(t: Transaction):
     return {
         "id": t.id,
-        "amount": float(t.amount) if t.amount is not None else None,
+        "amount": int(t.amount) if t.amount is not None else None,
         "transaction_id": t.transaction_id,
         "type": t.type,
         "date": t.date.isoformat() if t.date else None,
         "transactor_id": t.transactor_id,
+        "transactor": {
+            "id": t.transactor.id,
+            "name": t.transactor.name,
+            "picture": t.transactor.picture,
+            "label": t.transactor.label,
+        } if t.transactor else None,
         "category_id": t.category_id,
+        "category": {
+            "id": t.category.id,
+            "label": t.category.label,
+            "picture": t.category.picture,
+        } if t.category else None,
         "description": t.description,
         "confidence": t.confidence,
         "currency_id": t.currency_id,
         "user_id": t.user_id,
         "message_id": t.message_id,
+        "account_id": t.account_id,
+        "account": {
+            "id": t.account.id,
+            "account_last_four": t.account.account_last_four,
+            "bank_name": t.account.bank_name,
+            "type": t.account.type.value,
+        } if t.account else None,
     }
 
 
@@ -41,7 +60,15 @@ async def get_transaction_by_id(
 ):
     """Return a single transaction by ID."""
     tx = (
-        await session.execute(select(Transaction).filter(Transaction.id == transaction_id))
+        await session.execute(
+            select(Transaction)
+            .filter(Transaction.id == transaction_id)
+            .options(
+                joinedload(Transaction.transactor),
+                joinedload(Transaction.category),
+                joinedload(Transaction.account)
+            )
+        )
     ).scalar_one_or_none()
 
     if not tx:
@@ -120,12 +147,26 @@ async def list_transactions(
     if conditions:
         stmt = stmt.filter(and_(*conditions))
 
+    # Get total count before pagination
+    count_stmt = select(Transaction)
+    if conditions:
+        count_stmt = count_stmt.filter(and_(*conditions))
+    count_result = await session.execute(count_stmt)
+    total_count = len(count_result.scalars().all())
+
+    # Eager load relationships to avoid N+1 queries
+    stmt = stmt.options(
+        joinedload(Transaction.transactor),
+        joinedload(Transaction.category),
+        joinedload(Transaction.account)
+    )
+    
     stmt = stmt.order_by(Transaction.date.desc()).offset(offset).limit(limit)
 
     result = await session.execute(stmt)
     transactions = result.scalars().all()
 
     return {
-        "count": len(transactions),
+        "count": total_count,
         "items": [_serialize_transaction(t) for t in transactions],
     }
