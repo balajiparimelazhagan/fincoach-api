@@ -157,7 +157,7 @@ async def google_callback(
             
             logger.info(f"User already exists, tokens updated: {email}")
             # Redirect to frontend dashboard with token
-            redirect_url = f"{settings.FRONTEND_BASE_URL}{settings.FORNTEND_LOGIN_REDIRECT_PATH}?{urlencode({'token': jwt_token})}"
+            redirect_url = f"{settings.FRONTEND_BASE_URL}{settings.FRONTEND_LOGIN_REDIRECT_PATH}?{urlencode({'token': jwt_token})}"
             return RedirectResponse(url=redirect_url)
 
         # Create new user using model
@@ -195,7 +195,7 @@ async def google_callback(
             # Don't fail user creation if sync fails
         
         # Redirect to frontend dashboard with token
-        redirect_url = f"{settings.FRONTEND_BASE_URL}{settings.FORNTEND_LOGIN_REDIRECT_PATH}?{urlencode({'token': jwt_token})}"
+        redirect_url = f"{settings.FRONTEND_BASE_URL}{settings.FRONTEND_LOGIN_REDIRECT_PATH}?{urlencode({'token': jwt_token})}"
         return RedirectResponse(url=redirect_url)
 
     except ValueError as e:

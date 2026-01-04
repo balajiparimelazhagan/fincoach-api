@@ -1,5 +1,7 @@
 services:
   api:
+    image: fincoach:api-latest
+    container_name: fincoach-api
     build: .
     depends_on:
       db:
@@ -25,6 +27,7 @@ services:
   
   db:
     image: postgres:18-alpine
+    container_name: fincoach-db
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     environment:
@@ -38,6 +41,7 @@ services:
   
   redis:
     image: redis:7-alpine
+    container_name: fincoach-redis
     ports:
       - "6379:6379"
     networks:
@@ -49,6 +53,8 @@ services:
       retries: 5
   
   celery_worker:
+    image: fincoach:celery-worker-latest
+    container_name: fincoach-celery-worker
     build: .
     entrypoint: ["/usr/app/scripts/celery_worker_entrypoint.sh"]
     depends_on:
@@ -67,6 +73,8 @@ services:
     restart: unless-stopped
   
   celery_beat:
+    image: fincoach:celery-beat-latest
+    container_name: fincoach-celery-beat
     build: .
     entrypoint: ["/usr/app/scripts/celery_beat_entrypoint.sh"]
     depends_on:
