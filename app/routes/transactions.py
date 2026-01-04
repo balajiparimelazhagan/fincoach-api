@@ -8,6 +8,8 @@ from sqlalchemy import and_, or_
 
 from app.db import get_db_session
 from app.models.transaction import Transaction
+from app.models.user import User
+from app.dependencies import get_current_user
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -50,6 +52,7 @@ async def get_transaction_by_id(
 
 @router.get("")
 async def list_transactions(
+    current_user: User = Depends(get_current_user),
     # Filters
     date_from: Optional[datetime] = Query(default=None, description="Start date (ISO8601)"),
     date_to: Optional[datetime] = Query(default=None, description="End date (ISO8601)"),
@@ -57,7 +60,6 @@ async def list_transactions(
     amount_min: Optional[float] = Query(default=None, description="Minimum amount"),
     amount_max: Optional[float] = Query(default=None, description="Maximum amount"),
     type: Optional[str] = Query(default=None, description="Transaction type"),
-    user_id: Optional[str] = Query(default=None, description="Filter by user ID"),
     transactor_id: Optional[str] = Query(default=None, description="Filter by transactor ID"),
     category_id: Optional[str] = Query(default=None, description="Filter by category ID"),
     # Pagination
@@ -66,12 +68,31 @@ async def list_transactions(
     session: AsyncSession = Depends(get_db_session),
 ):
     """
-    List transactions with filtering. Read-only.
-
+    List transactions for the authenticated user with filtering.
+    
+    The user_id is automatically extracted from the JWT token in the Authorization header.
+    
     Supported filters: date range, description substring, amount range,
-    type, user_id, transactor_id, category_id.
+    type, transactor_id, category_id.
+    
+    Args:
+        current_user: Authenticated user (from JWT token)
+        date_from: Start date for filtering (ISO8601 format)
+        date_to: End date for filtering (ISO8601 format)
+        description_contains: Substring to search in description
+        amount_min: Minimum transaction amount
+        amount_max: Maximum transaction amount
+        type: Transaction type (income/expense)
+        transactor_id: Filter by transactor ID
+        category_id: Filter by category ID
+        limit: Maximum items to return
+        offset: Items to skip for pagination
+        session: Database session
+        
+    Returns:
+        List of transactions for the authenticated user
     """
-    conditions = []
+    conditions = [Transaction.user_id == current_user.id]
 
     if date_from:
         conditions.append(Transaction.date >= date_from)
@@ -90,8 +111,6 @@ async def list_transactions(
 
     if type:
         conditions.append(Transaction.type == type)
-    if user_id:
-        conditions.append(Transaction.user_id == user_id)
     if transactor_id:
         conditions.append(Transaction.transactor_id == transactor_id)
     if category_id:

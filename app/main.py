@@ -10,7 +10,6 @@ from app.routes import api_router
 from app.logging_config import setup_logging, get_logger
 from app.middleware.logging_middleware import LoggingMiddleware
 
-# Setup logging
 setup_logging(settings.LOG_LEVEL)
 logger = get_logger(__name__)
 
@@ -58,7 +57,7 @@ async def app_exception_handler(request: Request, exc: AppException):
 
 
 # Include routers
-app.include_router(api_router, prefix="/api/v1")
+app.include_router(api_router, prefix=settings.API_PREFIX)
 
 
 @app.get("/health")

@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     FRONTEND_BASE_URL: str = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
     FRONTEND_LOGIN_REDIRECT_PATH: str = os.getenv("FRONTEND_LOGIN_REDIRECT_PATH", "/dashboard")
     
+    # API Configuration
+    API_PREFIX: str = os.getenv("API_PREFIX", "/api/v1")
+    
     # JWT Configuration
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
