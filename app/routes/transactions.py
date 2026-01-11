@@ -1,16 +1,33 @@
+"""
+Transaction routes for the FinCoach API.
+
+This module provides endpoints for:
+- Listing transactions with filtering and pagination
+- Getting a single transaction by ID
+- Updating a single transaction
+- Bulk updating transactions with different scopes
+"""
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy.orm import joinedload
-from sqlalchemy import and_, or_
 
 from app.db import get_db_session
-from app.models.transaction import Transaction
 from app.models.user import User
 from app.dependencies import get_current_user
+from app.schemas.transaction_schemas import (
+    TransactionUpdateRequest,
+    BulkTransactionUpdateRequest,
+    TransactionResponse,
+    BulkUpdateResponse,
+    TransactionListResponse,
+)
+from app.services.transaction_service import (
+    TransactionQueryBuilder,
+    TransactionUpdateService,
+)
+from app.utils.transaction_serializer import serialize_transaction
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -18,155 +35,176 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
 
-def _serialize_transaction(t: Transaction):
+@router.get("/{transaction_id}", response_model=TransactionResponse)
+async def get_transaction_by_id(
+    transaction_id: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """
+    Get a single transaction by ID.
+    
+    Args:
+        transaction_id: UUID of the transaction
+        current_user: Authenticated user from JWT token
+        session: Database session
+        
+    Returns:
+        Serialized transaction with all relationships
+        
+    Raises:
+        HTTPException: 404 if transaction not found
+    """
+    service = TransactionUpdateService(session)
+    transaction = await service.get_transaction_by_id(transaction_id, current_user.id)
+    return serialize_transaction(transaction)
+
+
+@router.patch("/{transaction_id}/bulk", response_model=BulkUpdateResponse)
+async def bulk_update_transactions(
+    transaction_id: str,
+    update_data: BulkTransactionUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """
+    Bulk update transactions based on scope.
+    
+    Supports four update scopes:
+    - **single**: Update only the specified transaction
+    - **current_and_future**: Update current transaction and all future from same transactor
+    - **month_only**: Update all transactions from same transactor in current month only
+    - **month_and_future**: Update all transactions from same transactor in current month and future
+    
+    Args:
+        transaction_id: UUID of the reference transaction
+        update_data: Update payload with category_id, transactor_label, and scope
+        current_user: Authenticated user from JWT token
+        session: Database session
+        
+    Returns:
+        Dictionary with updated_count and serialized transaction
+        
+    Raises:
+        HTTPException: 400 if invalid scope, 404 if transaction not found
+    """
+    service = TransactionUpdateService(session)
+    
+    updated_count, transaction = await service.bulk_update_transactions(
+        transaction_id=transaction_id,
+        user_id=current_user.id,
+        scope=update_data.update_scope,
+        category_id=update_data.category_id,
+        transactor_label=update_data.transactor_label,
+    )
+    
     return {
-        "id": t.id,
-        "amount": int(t.amount) if t.amount is not None else None,
-        "transaction_id": t.transaction_id,
-        "type": t.type,
-        "date": t.date.isoformat() if t.date else None,
-        "transactor_id": t.transactor_id,
-        "transactor": {
-            "id": t.transactor.id,
-            "name": t.transactor.name,
-            "picture": t.transactor.picture,
-            "label": t.transactor.label,
-        } if t.transactor else None,
-        "category_id": t.category_id,
-        "category": {
-            "id": t.category.id,
-            "label": t.category.label,
-            "picture": t.category.picture,
-        } if t.category else None,
-        "description": t.description,
-        "confidence": t.confidence,
-        "currency_id": t.currency_id,
-        "user_id": t.user_id,
-        "message_id": t.message_id,
-        "account_id": t.account_id,
-        "account": {
-            "id": t.account.id,
-            "account_last_four": t.account.account_last_four,
-            "bank_name": t.account.bank_name,
-            "type": t.account.type.value,
-        } if t.account else None,
+        "updated_count": updated_count,
+        "transaction": serialize_transaction(transaction),
     }
 
 
-@router.get("/{transaction_id}")
-async def get_transaction_by_id(
+@router.patch("/{transaction_id}", response_model=TransactionResponse)
+async def update_transaction(
     transaction_id: str,
+    update_data: TransactionUpdateRequest,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
-):
-    """Return a single transaction by ID."""
-    tx = (
-        await session.execute(
-            select(Transaction)
-            .filter(Transaction.id == transaction_id)
-            .options(
-                joinedload(Transaction.transactor),
-                joinedload(Transaction.category),
-                joinedload(Transaction.account)
-            )
-        )
-    ).scalar_one_or_none()
+) -> dict:
+    """
+    Update a single transaction's category and/or transactor label.
+    
+    Args:
+        transaction_id: UUID of the transaction to update
+        update_data: Update payload with optional category_id and transactor_label
+        current_user: Authenticated user from JWT token
+        session: Database session
+        
+    Returns:
+        Serialized updated transaction
+        
+    Raises:
+        HTTPException: 404 if transaction not found
+    """
+    service = TransactionUpdateService(session)
+    transaction = await service.get_transaction_by_id(transaction_id, current_user.id)
+    
+    updated_transaction = await service.update_single_transaction(
+        transaction=transaction,
+        category_id=update_data.category_id,
+        transactor_label=update_data.transactor_label,
+    )
+    
+    return serialize_transaction(updated_transaction)
 
-    if not tx:
-        raise HTTPException(status_code=404, detail="Transaction not found")
 
-    return _serialize_transaction(tx)
-
-
-@router.get("")
+@router.get("", response_model=TransactionListResponse)
 async def list_transactions(
     current_user: User = Depends(get_current_user),
     # Filters
-    date_from: Optional[datetime] = Query(default=None, description="Start date (ISO8601)"),
-    date_to: Optional[datetime] = Query(default=None, description="End date (ISO8601)"),
-    description_contains: Optional[str] = Query(default=None, description="Substring match in description"),
-    amount_min: Optional[float] = Query(default=None, description="Minimum amount"),
-    amount_max: Optional[float] = Query(default=None, description="Maximum amount"),
-    type: Optional[str] = Query(default=None, description="Transaction type"),
-    transactor_id: Optional[str] = Query(default=None, description="Filter by transactor ID"),
-    category_id: Optional[str] = Query(default=None, description="Filter by category ID"),
+    date_from: Optional[datetime] = Query(None, description="Start date (ISO8601)"),
+    date_to: Optional[datetime] = Query(None, description="End date (ISO8601)"),
+    description_contains: Optional[str] = Query(None, description="Substring match in description"),
+    amount_min: Optional[float] = Query(None, description="Minimum amount"),
+    amount_max: Optional[float] = Query(None, description="Maximum amount"),
+    type: Optional[str] = Query(None, description="Transaction type (income/expense/saving)"),
+    transactor_id: Optional[str] = Query(None, description="Filter by transactor ID"),
+    category_id: Optional[str] = Query(None, description="Filter by category ID"),
     # Pagination
-    limit: int = Query(default=50, ge=1, le=200, description="Max items to return"),
-    offset: int = Query(default=0, ge=0, description="Items to skip"),
+    limit: int = Query(50, ge=1, le=200, description="Max items to return"),
+    offset: int = Query(0, ge=0, description="Items to skip"),
     session: AsyncSession = Depends(get_db_session),
-):
+) -> dict:
     """
-    List transactions for the authenticated user with filtering.
+    List transactions for the authenticated user with filtering and pagination.
     
     The user_id is automatically extracted from the JWT token in the Authorization header.
     
-    Supported filters: date range, description substring, amount range,
-    type, transactor_id, category_id.
+    **Supported filters:**
+    - Date range (date_from, date_to)
+    - Description substring search
+    - Amount range (amount_min, amount_max)
+    - Transaction type
+    - Transactor ID
+    - Category ID
+    
+    **Pagination:**
+    - Use `limit` and `offset` for pagination
+    - Maximum limit is 200 items per request
     
     Args:
-        current_user: Authenticated user (from JWT token)
-        date_from: Start date for filtering (ISO8601 format)
-        date_to: End date for filtering (ISO8601 format)
+        current_user: Authenticated user from JWT token
+        date_from: Start date for filtering
+        date_to: End date for filtering
         description_contains: Substring to search in description
         amount_min: Minimum transaction amount
         amount_max: Maximum transaction amount
-        type: Transaction type (income/expense)
-        transactor_id: Filter by transactor ID
-        category_id: Filter by category ID
+        type: Transaction type filter
+        transactor_id: Filter by transactor
+        category_id: Filter by category
         limit: Maximum items to return
         offset: Items to skip for pagination
         session: Database session
         
     Returns:
-        List of transactions for the authenticated user
+        Dictionary with count and list of transactions
     """
-    conditions = [Transaction.user_id == current_user.id]
-
-    if date_from:
-        conditions.append(Transaction.date >= date_from)
-    if date_to:
-        conditions.append(Transaction.date <= date_to)
-
-    if description_contains:
-        # Case-insensitive contains
-        like_expr = f"%{description_contains}%"
-        conditions.append(Transaction.description.ilike(like_expr))
-
-    if amount_min is not None:
-        conditions.append(Transaction.amount >= amount_min)
-    if amount_max is not None:
-        conditions.append(Transaction.amount <= amount_max)
-
-    if type:
-        conditions.append(Transaction.type == type)
-    if transactor_id:
-        conditions.append(Transaction.transactor_id == transactor_id)
-    if category_id:
-        conditions.append(Transaction.category_id == category_id)
-
-    stmt = select(Transaction)
-    if conditions:
-        stmt = stmt.filter(and_(*conditions))
-
-    # Get total count before pagination
-    count_stmt = select(Transaction)
-    if conditions:
-        count_stmt = count_stmt.filter(and_(*conditions))
-    count_result = await session.execute(count_stmt)
-    total_count = len(count_result.scalars().all())
-
-    # Eager load relationships to avoid N+1 queries
-    stmt = stmt.options(
-        joinedload(Transaction.transactor),
-        joinedload(Transaction.category),
-        joinedload(Transaction.account)
+    # Build query with filters
+    query_builder = (
+        TransactionQueryBuilder(session, current_user.id)
+        .with_date_range(date_from, date_to)
+        .with_description_contains(description_contains)
+        .with_amount_range(amount_min, amount_max)
+        .with_type(type)
+        .with_transactor(transactor_id)
+        .with_category(category_id)
     )
     
-    stmt = stmt.order_by(Transaction.date.desc()).offset(offset).limit(limit)
-
-    result = await session.execute(stmt)
-    transactions = result.scalars().all()
-
+    # Get count and transactions
+    total_count = await query_builder.count()
+    transactions = await query_builder.fetch(limit=limit, offset=offset)
+    
     return {
         "count": total_count,
-        "items": [_serialize_transaction(t) for t in transactions],
+        "items": [serialize_transaction(t) for t in transactions],
     }
