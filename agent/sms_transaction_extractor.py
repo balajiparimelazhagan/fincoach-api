@@ -33,26 +33,6 @@ from .regex_constants import (
 
 load_dotenv()
 
-DEFAULT_CATEGORIES = [
-    "Groceries",
-    "Transportation",
-    "Utilities",
-    "Entertainment",
-    "Healthcare",
-    "Shopping",
-    "Dining",
-    "Salary",
-    "Loan Payment",
-    "EMI",
-    "Bonus",
-    "Refund",
-    "Bills",
-    "Insurance",
-    "Subscription",
-    "UPI Transfer",
-    "Other",
-]
-
 DATE_FORMATS: Tuple[str, ...] = (
     "%d-%m-%Y %H:%M:%S",
     "%d/%m/%Y %H:%M:%S",
@@ -117,10 +97,19 @@ class SmsTransaction:
 class SmsTransactionExtractorAgent:
     """SMS Transaction Extractor Agent using Google ADK"""
 
-    def __init__(self):
-        """Initialize the SMS transaction extractor agent"""
-        self.categories = list(DEFAULT_CATEGORIES)
+    def __init__(self, db_session=None):
+        """Initialize the SMS transaction extractor agent
+        
+        Args:
+            db_session: Optional database session for fetching dynamic categories
+        """
+        # Import CategoryMapper to get standard categories
+        from app.utils.category_mapper import category_mapper
+        
+        self.category_mapper = category_mapper
+        self.categories = self.category_mapper.get_all_categories()
         self._categories_cache = ", ".join(self.categories)
+        self._db_session = db_session
         self._system_message = self._get_system_message()
         
         # Initialize account extractor for A2A coordination
@@ -134,9 +123,32 @@ class SmsTransactionExtractorAgent:
             instruction=self._system_message,
         )
 
-    def _get_system_message(self) -> str:
-        """Create the reusable parsing instruction for SMS."""
+    def _get_system_message(self, category_guidelines: Optional[str] = None) -> str:
+        """Create the reusable parsing instruction for SMS.
+        
+        Args:
+            category_guidelines: Optional pre-formatted category guidelines from database
+        """
         categories_str = self._categories_cache
+        
+        # Use provided guidelines or fall back to default
+        if not category_guidelines:
+            category_guidelines = """- Housing: rent payments, housing society fees
+   - Utilities: electricity, water, gas bills
+   - Food: food delivery, groceries
+   - Transport: fuel, taxi, tolls
+   - Shopping: online/offline purchases
+   - Subscriptions: recurring services
+   - Health: medical, pharmacy, gym
+   - Entertainment: movies, games, OTT
+   - Travel: flights, hotels
+   - Income: salary, bonus, refunds
+   - Savings: deposits, FD, mutual funds, SIP, stocks, investments
+   - Loans & EMIs: loan payments, EMI deductions
+   - Transfers: UPI, NEFT, bank transfers
+   - Fees & Charges: bank charges, penalties
+   - Miscellaneous: anything that doesn't fit above"""
+        
         return f"""You are an expert transaction extractor for financial SMS messages from Indian banks.
 Your task is to extract transaction information from SMS content.
 
@@ -155,10 +167,12 @@ For each SMS, extract:
    - 'income' if money is being RECEIVED (credit, deposit, salary, transfer in)
    - 'refund' if this is a REVERSAL, REFUND, or CANCELLED transaction
 3. Date and Time (in YYYY-MM-DD HH:MM:SS format, parse from SMS)
-4. Category (choose from: {categories_str})
-   - Use "Loan Payment" for EMI/loan deductions
-   - Use "Salary" for salary credits
-   - Use appropriate category based on transaction description
+4. Category - CRITICAL: You MUST choose EXACTLY ONE category from this list:
+   {categories_str}
+   
+   Category Guidelines for SMS:
+   {category_guidelines}
+
 5. Description (brief description of the transaction, include purpose if mentioned)
 6. Transactor (who sent the money or who received it - company name, bank name, or "Unknown")
 7. Transactor Source ID (UMRN for loans, UPI ID, or account reference if available)
@@ -176,17 +190,24 @@ Always return the response as a valid JSON object with these exact fields:
 
 Examples:
 1. Loan SMS: "INR 26,200.00 debited from HDFC Bank XX4319 on 05-DEC-25. Info: ACH D- TP ACH PNBHOUSINGFIN"
-   → {{"amount": 26200, "transaction_type": "expense", "date": "2025-12-05 00:00:00", "category": "Loan Payment", "description": "Loan payment to PNB Housing Finance", "transactor": "PNB Housing Finance", "transactor_source_id": "HDFC7021807230034209"}}
+   → {{"amount": 26200, "transaction_type": "expense", "date": "2025-12-05 00:00:00", "category": "Loans & EMIs", "description": "Loan payment to PNB Housing Finance", "transactor": "PNB Housing Finance", "transactor_source_id": "HDFC7021807230034209"}}
 
 2. Salary SMS: "INR 1,31,506.00 deposited in HDFC Bank A/c XX4319 on 28-NOV-25 for Salary NOV 2025"
-   → {{"amount": 131506, "transaction_type": "income", "date": "2025-11-28 00:00:00", "category": "Salary", "description": "Salary for NOV 2025", "transactor": "Employer", "transactor_source_id": null}}
+   → {{"amount": 131506, "transaction_type": "income", "date": "2025-11-28 00:00:00", "category": "Income", "description": "Salary for NOV 2025", "transactor": "Employer", "transactor_source_id": null}}
 
+IMPORTANT: The category field MUST be one of the exact category names from the list above.
 Be precise with amounts and dates. Extract all relevant information from the SMS."""
 
-    def _refresh_system_message(self) -> None:
-        """Refresh cached category string and parsing instruction."""
+    async def refresh_categories_from_db(self, db) -> None:
+        """Refresh categories and guidelines from database.
+        
+        Args:
+            db: Database session
+        """
         self._categories_cache = ", ".join(self.categories)
-        self._system_message = self._get_system_message()
+        category_guidelines = await self.category_mapper.get_category_guidelines_text(db)
+        self._system_message = self._get_system_message(category_guidelines)
+        self.agent.instruction = self._system_message
 
     def parse_sms(
         self, 
@@ -334,20 +355,20 @@ Be precise with amounts and dates. Extract all relevant information from the SMS
         if not trans_type:
             trans_type = "expense"  # Default assumption
 
-        # Determine category
-        category = "Other"
+        # Determine category using standard categories
+        category = "Miscellaneous"
         text_lower = text.lower()
         
         if "salary" in text_lower:
-            category = "Salary"
+            category = "Income"
         elif any(word in text_lower for word in ["loan", "emi", "housing", "finance"]):
-            category = "Loan Payment"
+            category = "Loans & EMIs"
         elif any(word in text_lower for word in ["upi", "transfer"]):
-            category = "UPI Transfer"
+            category = "Savings & Transfers"
         elif any(word in text_lower for word in ["bill", "electricity", "water", "gas"]):
-            category = "Bills"
+            category = "Utilities"
         elif "refund" in text_lower:
-            category = "Refund"
+            category = "Income"  # Map Refund to Income category
 
         # Extract transactor
         transactor = None
@@ -391,12 +412,15 @@ Be precise with amounts and dates. Extract all relevant information from the SMS
     ) -> Optional[SmsTransaction]:
         """Create SmsTransaction object from parsed data"""
         try:
-            # Check if category is Refund and override transaction_type
-            category = data.get("category", "Other")
+            # Validate category to standard categories
+            category = data.get("category", "Miscellaneous")
+            validated_category = self.category_mapper.validate_category(category)
+            
             trans_type_str = data.get("transaction_type", "expense")
             
-            if category.lower() == "refund":
-                transaction_type = TransactionType.REFUND
+            # Adjust transaction type based on category
+            if validated_category == "Income" or trans_type_str == "refund":
+                transaction_type = TransactionType.REFUND if trans_type_str == "refund" else TransactionType.INCOME
             else:
                 transaction_type = TransactionType(trans_type_str)
             
@@ -404,7 +428,7 @@ Be precise with amounts and dates. Extract all relevant information from the SMS
                 amount=float(data["amount"]),
                 transaction_type=transaction_type,
                 date=data["date"],
-                category=category,
+                category=validated_category,  # Use validated category
                 description=data.get("description"),
                 transactor=data.get("transactor"),
                 transactor_source_id=data.get("transactor_source_id"),

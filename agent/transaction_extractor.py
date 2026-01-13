@@ -33,24 +33,6 @@ from .regex_constants import (
 
 load_dotenv()
 
-DEFAULT_CATEGORIES = [
-    "Groceries",
-    "Transportation",
-    "Utilities",
-    "Entertainment",
-    "Healthcare",
-    "Shopping",
-    "Dining",
-    "Salary",
-    "Bonus",
-    "Refund",
-    "Bills",
-    "Insurance",
-    "Subscription",
-    "UPI Transfer",
-    "Other",
-]
-
 DATE_FORMATS: Tuple[str, ...] = (
     "%d-%m-%Y %H:%M:%S",
     "%d/%m/%Y %H:%M:%S",
@@ -116,10 +98,19 @@ class Transaction:
 class TransactionExtractorAgent:
     """Transaction Extractor Agent using Google ADK"""
 
-    def __init__(self):
-        """Initialize the transaction extractor agent"""
-        self.categories = list(DEFAULT_CATEGORIES)
+    def __init__(self, db_session=None):
+        """Initialize the transaction extractor agent
+        
+        Args:
+            db_session: Optional database session for fetching dynamic categories
+        """
+        # Import CategoryMapper to get standard categories
+        from app.utils.category_mapper import category_mapper
+        
+        self.category_mapper = category_mapper
+        self.categories = self.category_mapper.get_all_categories()
         self._categories_cache = ", ".join(self.categories)
+        self._db_session = db_session
         self._system_message = self._get_system_message()      
         
         # Initialize account extractor for A2A coordination
@@ -133,9 +124,37 @@ class TransactionExtractorAgent:
             instruction=self._system_message,
         )
 
-    def _get_system_message(self) -> str:
-        """Create the reusable parsing instruction."""
+    def _get_system_message(self, category_guidelines: Optional[str] = None) -> str:
+        """Create the reusable parsing instruction.
+        
+        Args:
+            category_guidelines: Optional pre-formatted category guidelines from database
+        """
         categories_str = self._categories_cache
+        
+        # Use provided guidelines or fall back to default
+        if not category_guidelines:
+            category_guidelines = """- Housing: rent, mortgage, property tax, maintenance
+               - Utilities: electricity, water, gas, internet bills
+               - Food: groceries, restaurants, food delivery
+               - Transport: fuel, taxi, public transport
+               - Shopping: retail, online shopping, clothing
+               - Subscriptions: Netflix, Spotify, recurring services
+               - Health: hospital, medicine, gym, fitness
+               - Entertainment: movies, games, sports events
+               - Travel: flights, hotels, vacation
+               - Personal Care: salon, spa, grooming
+               - Education: school, courses, books
+               - Family & Relationships: gifts, celebrations
+               - Income: salary, freelance, refunds
+               - Savings: deposits, FD, mutual funds, SIP, stocks, investments
+               - Loans & EMIs: loan payments, credit card
+               - Transfers: UPI, NEFT, bank transfers
+               - Fees & Charges: bank fees, penalties
+               - Taxes: income tax, GST
+               - Donations: charity, religious donations
+               - Miscellaneous: anything that doesn't fit above"""
+        
         return f"""You are an expert transaction extractor for financial data. 
             Your task is to extract transaction information from email content.
 
@@ -147,7 +166,12 @@ class TransactionExtractorAgent:
                - 'expense' if money is being SPENT (debit, payment, transfer out)
                Keywords for refund: reversal, reversed, refund, refunded, cancelled, cancellation, credited back
             3. Date and Time (in YYYY-MM-DD HH:MM:SS format, use current date and time if not found)
-            4. Category (choose from: {categories_str})
+            4. Category - CRITICAL: You MUST choose EXACTLY ONE category from this list:
+               {categories_str}
+               
+               Category Guidelines:
+               {category_guidelines}
+               
             5. Description (brief description of the transaction)
             6. Transactor (who sent the money or who received it, name of transactor or bank or UPI ID)
             7. Transactor Source ID (transactor's UPI ID or bank ID or null if not available)
@@ -163,13 +187,20 @@ class TransactionExtractorAgent:
                 "transactor_source_id": "<transactor_source_id>"
             }}
 
+            IMPORTANT: The category field MUST be one of the exact category names from the list above.
             If any information is missing, make a reasonable inference based on the email content.
             Be precise with amounts and dates. For ambiguous cases, indicate confidence level."""
 
-    def _refresh_system_message(self) -> None:
-        """Refresh cached category string and parsing instruction."""
+    async def refresh_categories_from_db(self, db) -> None:
+        """Refresh categories and guidelines from database.
+        
+        Args:
+            db: Database session
+        """
         self._categories_cache = ", ".join(self.categories)
-        self._system_message = self._get_system_message()
+        category_guidelines = await self.category_mapper.get_category_guidelines_text(db)
+        self._system_message = self._get_system_message(category_guidelines)
+        self.agent.instruction = self._system_message
 
     def parse_email(self, message_id: str, email_subject: str, email_body: str, sender_email: Optional[str] = None) -> Optional[Transaction]:
         """
@@ -286,16 +317,16 @@ class TransactionExtractorAgent:
             if acct_match:
                 acct_from = acct_match.group(1)
 
-        # Category inference
+        # Category inference using standard categories
         category = None
         if UPI_PATTERN.search(text):
-            category = "UPI Transfer"
+            category = "Transfers"  # Map UPI Transfer to standard category
         elif TRANSFER_PATTERN.search(text):
-            category = "Bank Transfer"
+            category = "Transfers"  # Map Bank Transfer to standard category
         elif BILL_PATTERN.search(text):
-            category = "Bills"
+            category = "Fees & Charges"  # Map Bills to standard category
         else:
-            category = "Other"
+            category = "Miscellaneous"  # Map Other to standard category
 
         # Description
         desc_parts = []
@@ -316,7 +347,7 @@ class TransactionExtractorAgent:
             result["amount"] = amount
             result["transaction_type"] = trans_type or "expense"
             result["date"] = date_str or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            result["category"] = category or "Other"
+            result["category"] = category or "Miscellaneous"
             result["description"] = description
             result["transactor"] = source or ""
             result["transactor_source_id"] = ref or acct_from
@@ -398,11 +429,14 @@ class TransactionExtractorAgent:
 
             # Parse transaction type - check category for Refund as well
             trans_type_str = data.get("transaction_type", "").lower()
-            category = data.get("category", "Other")
+            category = data.get("category", "Miscellaneous")
             
-            # If category is "Refund", transaction type should be "refund"
-            if category == "Refund" or trans_type_str == "refund":
-                transaction_type = TransactionType.REFUND
+            # Validate category to standard categories
+            validated_category = self.category_mapper.validate_category(category)
+            
+            # If category is "Income" or indicates refund, adjust transaction type
+            if validated_category == "Income" or trans_type_str == "refund":
+                transaction_type = TransactionType.REFUND if trans_type_str == "refund" else TransactionType.INCOME
             elif trans_type_str == "income":
                 transaction_type = TransactionType.INCOME
             else:
@@ -413,7 +447,7 @@ class TransactionExtractorAgent:
                 amount=float(data.get("amount", 0)),
                 transaction_type=transaction_type,
                 date=data.get("date", ""),
-                category=category,
+                category=validated_category,  # Use validated category
                 description=data.get("description"),
                 transactor=data.get("transactor") or data.get("source"),
                 transactor_source_id=data.get("transactor_source_id"),
