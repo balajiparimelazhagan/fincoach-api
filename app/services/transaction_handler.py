@@ -6,7 +6,6 @@ impl_2.md: Task B (streak updates) must be triggered on EVERY transaction.
 """
 
 from app.models.transaction import Transaction
-from app.celery.celery_tasks import update_recurring_streak
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -23,6 +22,9 @@ async def handle_new_transaction(transaction: Transaction) -> None:
     Returns:
         None (async task queued, no blocking)
     """
+    # Import here to avoid circular dependency
+    from app.celery.celery_tasks import update_recurring_streak
+    
     try:
         # Queue streak update task asynchronously
         # impl_2.md: Task B runs on EVERY transaction

@@ -43,15 +43,17 @@ def upgrade() -> None:
         'Fees & Charges': 'bank fees, penalties',
         'Taxes': 'income tax, GST',
         'Donations': 'charity, religious donations',
-        'Miscellaneous': 'anything that doesn\'t fit above',
+        'Miscellaneous': "anything that doesn't fit above",
     }
     
+    # Get connection for parameterized queries
+    connection = op.get_bind()
+    
     for category, description in category_descriptions.items():
-        op.execute(f"""
-            UPDATE categories 
-            SET description = '{description}' 
-            WHERE label = '{category}'
-        """)
+        connection.execute(
+            sa.text("UPDATE categories SET description = :desc WHERE label = :cat"),
+            {"desc": description, "cat": category}
+        )
 
 
 def downgrade() -> None:

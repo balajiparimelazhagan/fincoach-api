@@ -10,10 +10,11 @@ from app.models.user_permission import UserPermission
 from app.models.sms_transaction_sync_job import SmsTransactionSyncJob
 from app.models.email_transaction_sync_job import EmailTransactionSyncJob
 from app.models.account import Account
-from app.models.spending_analysis_job import SpendingAnalysisJob, SpendingAnalysisJobStatus, SpendingAnalysisJobTrigger
 from app.models.recurring_pattern import RecurringPattern, RecurringPatternType, RecurringPatternStatus, AmountBehavior
 from app.models.recurring_pattern_streak import RecurringPatternStreak
 from app.models.budget_forecast import BudgetForecast
+from app.models.pattern_transaction import PatternTransaction
+from app.models.pattern_obligation import PatternObligation, ObligationStatus
 
 __all__ = [
     "Base", 
@@ -28,15 +29,15 @@ __all__ = [
     "SmsTransactionSyncJob",
     "EmailTransactionSyncJob",
     "Account",
-    "SpendingAnalysisJob",
-    "SpendingAnalysisJobStatus",
-    "SpendingAnalysisJobTrigger",
     "RecurringPattern",
     "RecurringPatternType",
     "RecurringPatternStatus",
     "AmountBehavior",
     "RecurringPatternStreak",
     "BudgetForecast",
+    "PatternTransaction",
+    "PatternObligation",
+    "ObligationStatus",
 ]
 
 

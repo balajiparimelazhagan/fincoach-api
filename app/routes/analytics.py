@@ -5,46 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db_session
 from app.models.user import User
-from app.dependencies import get_current_user, get_db
-from app.services.spending_analysis_service import SpendingAnalysisService
-from app.services.stats_service import calculate_period_stats, calculate_category_spending, get_comprehensive_stats
-from app.models import SpendingAnalysisJob, RecurringPattern
-from app.celery.celery_tasks import detect_or_update_recurring_pattern
-from uuid import UUID
+from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
-@router.post("/spending-patterns/analyze")
-async def trigger_spending_analysis(user_id: UUID, db: AsyncSession = Depends(get_db)):
-    service = SpendingAnalysisService(db)
-    job = await service.create_job(user_id=user_id, triggered_by='MANUAL')
-    detect_or_update_recurring_pattern.delay(str(user_id), str(job.id))
-    return {"job_id": str(job.id), "status": job.status, "message": "Spending analysis job triggered successfully."}
-
-@router.get("/spending-patterns/jobs/{job_id}")
-async def get_spending_analysis_job(job_id: UUID, db: AsyncSession = Depends(get_db)):
-    service = SpendingAnalysisService(db)
-    job = await service.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return job
-
-@router.get("/spending-patterns")
-async def list_spending_analysis_jobs(user_id: UUID, db: AsyncSession = Depends(get_db)):
-    service = SpendingAnalysisService(db)
-    jobs = await service.get_jobs(user_id)
-    return jobs
-
-@router.get("/spending-patterns/{pattern_id}")
-async def get_spending_pattern(pattern_id: UUID, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        RecurringPattern.__table__.select().where(RecurringPattern.id == pattern_id)
-    )
-    pattern = result.fetchone()
-    if not pattern:
-        raise HTTPException(status_code=404, detail="Pattern not found")
-    return pattern
-
+# ============================================================================
+# STATISTICS ENDPOINTS
+# ============================================================================
 
 @router.get("/stats/summary")
 async def get_stats_summary(
@@ -54,6 +21,8 @@ async def get_stats_summary(
     session: AsyncSession = Depends(get_db_session),
 ):
     """Get summary statistics: total income, expense, and savings for a date range."""
+    from app.services.stats_service import calculate_period_stats
+    
     try:
         if date_from:
             date_from_obj = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
@@ -88,6 +57,8 @@ async def get_spending_by_category(
     session: AsyncSession = Depends(get_db_session),
 ):
     """Get spending breakdown by category for a date range."""
+    from app.services.stats_service import calculate_category_spending
+    
     try:
         if date_from:
             date_from_obj = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
@@ -122,6 +93,8 @@ async def get_comprehensive_stats_endpoint(
     session: AsyncSession = Depends(get_db_session),
 ):
     """Get comprehensive statistics including income, expense, savings, and category breakdown."""
+    from app.services.stats_service import get_comprehensive_stats
+    
     try:
         if date_from:
             date_from_obj = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
@@ -146,4 +119,3 @@ async def get_comprehensive_stats_endpoint(
         date_to=date_to_obj,
     )
     return stats
-

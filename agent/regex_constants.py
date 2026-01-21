@@ -26,3 +26,17 @@ ALT_REF_PATTERN = re.compile(
 ACCOUNT_PATTERN = re.compile(r"from account\s*(\d{2,}\d*)", re.IGNORECASE)
 ALT_ACCOUNT_PATTERN = re.compile(r"acct(?:ount)?[:#]?\s*(\d{2,}\d*)", re.IGNORECASE)
 
+# Currency code to symbol mapping
+CURRENCY_SYMBOLS = {
+    'INR': '₹',
+    'USD': '$',
+    'EUR': '€',
+    'GBP': '£',
+    'JPY': '¥',
+    'AUD': 'A$',
+    'CAD': 'C$',
+    'CHF': 'CHF',
+    'CNY': '¥',
+}
+
+
