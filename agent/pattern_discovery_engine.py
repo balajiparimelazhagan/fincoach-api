@@ -77,12 +77,13 @@ class DeterministicPatternDiscovery:
     
     # Configuration constants (from requirements)
     MIN_TRANSACTIONS_REQUIRED = 1
-    FREQUENT_THRESHOLD_PER_30_DAYS = 3
-    AMOUNT_TOLERANCE_PERCENT = 0.25  # 25%
-    AMOUNT_TOLERANCE_ABSOLUTE = Decimal('50.00')  # ₹50
+    FREQUENT_THRESHOLD_PER_30_DAYS = 7  # Increased from 3 to allow weekly patterns (4.3/30d)
+    AMOUNT_TOLERANCE_PERCENT = 0.35  # Increased from 0.25 to 0.35 (35%)
+    AMOUNT_TOLERANCE_ABSOLUTE = Decimal('75.00')  # Increased from ₹50 to ₹75
     MIN_INTERVAL_DAYS = 10
     
     # Case classification ranges
+    WEEKLY_RANGE = (6, 8)  # Weekly patterns (7 days ± 1)
     MONTHLY_RANGE = (27, 33)
     BI_MONTHLY_RANGE = (55, 65)
     QUARTERLY_RANGE = (85, 95)
@@ -315,7 +316,9 @@ class DeterministicPatternDiscovery:
                 return PatternCase.FREQUENT_VARIABLE  # Irregular and not monthly
         
         # Fixed interval cases
-        if self.MONTHLY_RANGE[0] <= interval_days <= self.MONTHLY_RANGE[1]:
+        if self.WEEKLY_RANGE[0] <= interval_days <= self.WEEKLY_RANGE[1]:
+            return PatternCase.FIXED_MONTHLY  # Map to MONTHLY for now (DB schema limitation)
+        elif self.MONTHLY_RANGE[0] <= interval_days <= self.MONTHLY_RANGE[1]:
             return PatternCase.FIXED_MONTHLY
         elif self.BI_MONTHLY_RANGE[0] <= interval_days <= self.BI_MONTHLY_RANGE[1]:
             return PatternCase.BI_MONTHLY

@@ -76,143 +76,277 @@ class TransactionGenerator:
         })
     
     def generate_fixed_recurring(self, start_date: datetime, months: int):
-        """Generate fixed recurring transactions"""
+        """Generate fixed recurring transactions with REALISTIC monthly intervals"""
         print("Generating fixed recurring transactions...")
         
+        # PNB Housing EMI - 5th of every month (perfect monthly pattern)
+        current_date = start_date.replace(day=5)
         for month in range(months):
-            base_date = start_date + timedelta(days=30 * month)
-            
-            # PNB Housing EMI - 5th of every month
-            emi_date = base_date.replace(day=5)
             self.add_transaction(
-                emi_date, 26200, "PNB Housing Finance Limited", "Loans",
-                f"Home loan EMI for {emi_date.strftime('%B %Y')}",
+                current_date, 26200, "PNB Housing Finance Limited", "Loans",
+                f"Home loan EMI for {current_date.strftime('%B %Y')}",
                 account="hdfc_savings_4319",
                 source_id="HDFC7021807230034209"
             )
-            
-            # Netflix - 12th of every month
-            netflix_date = base_date.replace(day=12)
+            # Next month same day (28-31 days interval)
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
+        
+        # Netflix - 12th of every month (perfect monthly subscription)
+        current_date = start_date.replace(day=12)
+        for month in range(months):
             self.add_transaction(
-                netflix_date, 840, "NETFLIX COM", "Subscriptions",
+                current_date, 840, "NETFLIX COM", "Subscriptions",
                 "Netflix Premium monthly subscription",
                 account="hdfc_credit_7420",
                 source_id="netflixupi.payu@hdfcbank"
             )
-            
-            # Aura Silver SIP - 1st, 2nd, 3rd of each month (increasing pattern)
-            aura_amounts = [100, 110, 121]  # Month 0, 1, 2 pattern
-            base_amount = 100 + (month * 10)
-            
-            for day, increment in [(1, 0), (2, 10), (3, 21)]:
-                aura_date = base_date.replace(day=day)
-                amount = base_amount + increment
-                self.add_transaction(
-                    aura_date, amount, "AuraGold", "Savings",
-                    f"Digital gold purchase - monthly SIP",
-                    source_id="cf.auragoldapp@mairtel"
-                )
-            
-            # Mutual Fund SIP - 3rd, 11th, 12th of month (increasing)
-            mf_base = 1000 + (month * 100)
-            for day, extra in [(3, 0), (11, 100), (12, 110)]:
-                mf_date = base_date.replace(day=day)
-                self.add_transaction(
-                    mf_date, mf_base + extra, "Zerodha Broking Limited", "Savings",
-                    f"Mutual fund SIP investment",
-                    source_id="zerodha.rzpiccl.brk@validicici"
-                )
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
+        
+        # Spotify - 1st of every month (perfect fixed monthly)
+        current_date = start_date.replace(day=1)
+        for month in range(months):
+            self.add_transaction(
+                current_date, 119, "Spotify", "Subscriptions",
+                "Spotify Premium monthly subscription",
+                account="hdfc_savings_4319",
+                source_id="spotify@paytm"
+            )
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
+        
+        # Amazon Prime - 18th of every month (fixed monthly)
+        current_date = start_date.replace(day=18)
+        for month in range(months):
+            self.add_transaction(
+                current_date, 299, "Amazon Prime", "Subscriptions",
+                "Amazon Prime monthly subscription",
+                account="hdfc_credit_7420",
+                source_id="primevideo@paytm"
+            )
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
+        
+        # Google Play - 28th of every month (fixed monthly)
+        current_date = start_date.replace(day=28)
+        for month in range(months):
+            self.add_transaction(
+                current_date, 650, "Google Play", "Subscriptions",
+                "Google Play subscription",
+                account="hdfc_savings_4319",
+                source_id="googleplay@paytm"
+            )
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
+        
+        # Digital Gold SIP - 6th of every month (variable amount monthly)
+        current_date = start_date.replace(day=6)
+        base_amount = 100
+        for month in range(months):
+            amount = base_amount + (month * 10)  # Gradually increasing
+            self.add_transaction(
+                current_date, amount, "AuraGold", "Savings",
+                f"Digital gold purchase - monthly SIP",
+                source_id="cf.auragoldapp@mairtel"
+            )
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
+        
+        # Mutual Fund SIP - 3rd of every month (variable amount monthly)
+        current_date = start_date.replace(day=3)
+        base_mf = 1000
+        for month in range(months):
+            amount = base_mf + (month * 100)  # Gradually increasing
+            self.add_transaction(
+                current_date, amount, "Zerodha Broking Limited", "Savings",
+                f"Mutual fund SIP investment",
+                source_id="zerodha.rzpiccl.brk@validicici"
+            )
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
     
     def generate_semi_monthly_income(self, start_date: datetime, months: int):
-        """Generate semi-monthly recurring income"""
+        """Generate semi-monthly recurring income with proper intervals"""
         print("Generating semi-monthly income...")
         
+        # Mr Sabitha - Last day of every month (₹16,500 rental income)
+        current_date = start_date
         for month in range(months):
-            base_date = start_date + timedelta(days=30 * month)
+            # Get last day of current month
+            if current_date.month == 12:
+                last_day = current_date.replace(year=current_date.year + 1, month=1, day=1) - timedelta(days=1)
+            else:
+                last_day = current_date.replace(month=current_date.month + 1, day=1) - timedelta(days=1)
             
-            # Sabitha - Last day of month (₹16,500)
-            last_day = (base_date.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
             self.add_transaction(
                 last_day, 16500, "Mr Sabitha", "Income",
                 "Rental income", tx_type="income",
                 source_id="sabipari2674@oksbi"
             )
             
-            # Swathi - 1st and last day of month (₹4,000-5,000)
-            first_day = base_date.replace(day=1)
-            amount1 = random.choice([4000, 4500, 5000])
+            # Move to next month
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
+        
+        # Niraimathi - Monthly on 5th and 31st (salary + bonus pattern)
+        current_date = start_date.replace(day=5)
+        for month in range(months):
             self.add_transaction(
-                first_day, amount1, "Ms Swathi P", "Income",
-                "Consulting payment", tx_type="income",
-                source_id="swathipari155@oksbi"
+                current_date, 30000, "NIRAIMATHI SANKARASUBRAMANIYAN", "Income",
+                "Monthly salary", tx_type="income",
+                source_id="niraimathi@okaxis"
             )
-            
-            last_day2 = last_day.replace(day=last_day.day - 1) if last_day.day > 1 else last_day
-            amount2 = random.choice([4000, 4500, 5000])
-            self.add_transaction(
-                last_day2, amount2, "Ms Swathi P", "Income",
-                "Consulting payment", tx_type="income",
-                source_id="swathipari155@oksbi"
-            )
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
     
     def generate_monthly_variable(self, start_date: datetime, months: int):
-        """Generate monthly variable transactions"""
+        """Generate monthly variable transactions with realistic patterns"""
         print("Generating monthly variable transactions...")
         
+        # Family support - 6th of every month (variable amount)
+        current_date = start_date.replace(day=6)
         for month in range(months):
-            base_date = start_date + timedelta(days=30 * month)
-            
-            # Sarath - 3 times a month (₹8,000-10,000)
-            for day in [4, 6, 3]:
-                sarath_date = base_date.replace(day=min(day, 28))
-                amount = random.randint(8000, 10000)
-                self.add_transaction(
-                    sarath_date, amount, "SARATHKUMAR SENTHILKUMAR", "Transfers",
-                    "Family support transfer", tx_type="expense",
-                    source_id="sarath06112003@okaxis"
-                )
-            
-            # Selvam - 8-9 times a month (₹2,200-10,000 - highly variable)
-            for i in range(random.randint(8, 9)):
-                day = random.randint(2, 28)
-                selvam_date = base_date.replace(day=day)
-                amount = random.choice([2200, 2400, 2500, 4200, 4300, 8200, 8300, 10000])
-                self.add_transaction(
-                    selvam_date, amount, "Mr S Stanislous", "Food",
-                    "Restaurant/catering payment", tx_type="expense",
-                    source_id="bharatpe.90059928185@fbpe"
-                )
+            amount = random.randint(8000, 10000)
+            self.add_transaction(
+                current_date, amount, "SARATHKUMAR SENTHILKUMAR", "Transfers",
+                "Family support transfer", tx_type="expense",
+                source_id="sarath06112003@okaxis"
+            )
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
     
     def generate_utilities(self, start_date: datetime, months: int):
-        """Generate utility bills"""
+        """Generate utility bills with realistic monthly patterns"""
         print("Generating utility bills...")
         
+        # Indane Gas - 15th of every month (₹1,400 fixed)
+        current_date = start_date.replace(day=15)
         for month in range(months):
-            base_date = start_date + timedelta(days=30 * month)
-            
-            # Indane Gas - 8th, 15th, 5th of month (₹1,400)
-            for day in [8, 15, 5]:
-                gas_date = base_date.replace(day=min(day, 28))
-                self.add_transaction(
-                    gas_date, 1400, "Indane Gas", "Utilities",
-                    "LPG cylinder refill",
-                    source_id="indanegas@paytm"
-                )
-            
-            # Electricity Bill - 7th, 9th, 5th of month (₹800-1,800)
-            for day in [7, 9, 5]:
-                elec_date = base_date.replace(day=min(day, 28))
-                amount = random.randint(800, 1800)
-                self.add_transaction(
-                    elec_date, amount, "BESCOM", "Utilities",
-                    f"Electricity bill for {elec_date.strftime('%B %Y')}",
-                    source_id="bescom.bill@paytm"
-                )
+            self.add_transaction(
+                current_date, 1400, "Indane Gas", "Utilities",
+                "LPG cylinder refill",
+                source_id="indanegas@paytm"
+            )
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
+        
+        # Electricity Bill - 7th of every month (₹800-1,800 variable)
+        current_date = start_date.replace(day=7)
+        for month in range(months):
+            amount = random.randint(800, 1800)
+            self.add_transaction(
+                current_date, amount, "BESCOM", "Utilities",
+                f"Electricity bill for {current_date.strftime('%B %Y')}",
+                source_id="bescom.bill@paytm"
+            )
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
+        
+        # Google Workspace - 4th of every month (₹2,262.43 fixed)
+        current_date = start_date.replace(day=4)
+        for month in range(months):
+            self.add_transaction(
+                current_date, 2262.43, "GOOGLEWORKSP", "Subscriptions",
+                "Google Workspace monthly subscription",
+                account="hdfc_credit_7420",
+                source_id="googleworkspace@paytm"
+            )
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
+    
+    def generate_monthly_healthcare(self, start_date: datetime, months: int):
+        """Generate monthly healthcare expenses (pharmacies, fitness)"""
+        print("Generating monthly healthcare...")
+        
+        # Apollo Pharmacy - 10th of every month (variable amount)
+        current_date = start_date.replace(day=10)
+        for month in range(months):
+            amount = random.randint(500, 2000)
+            self.add_transaction(
+                current_date, amount, "Apollo Pharmacy", "Health",
+                "Monthly medicine purchase",
+                source_id="apollo@paytm"
+            )
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
+        
+        # Medplus - 22nd of every month (variable amount)
+        current_date = start_date.replace(day=22)
+        for month in range(months):
+            amount = random.randint(400, 1500)
+            self.add_transaction(
+                current_date, amount, "Medplus", "Health",
+                "Monthly pharmacy purchase",
+                source_id="medplus@paytm"
+            )
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
+        
+        # 1mg - 25th of every month (variable amount)
+        current_date = start_date.replace(day=25)
+        for month in range(months):
+            amount = random.randint(300, 1800)
+            self.add_transaction(
+                current_date, amount, "1mg", "Health",
+                "Monthly medicine order",
+                source_id="1mg@paytm"
+            )
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
+        
+        # Cult.fit - 1st of every month (fitness subscription)
+        current_date = start_date.replace(day=1)
+        for month in range(months):
+            amount = random.choice([1020, 1499, 2672])  # Different plans
+            self.add_transaction(
+                current_date, amount, "Cult.fit", "Health",
+                "Fitness subscription",
+                source_id="cultfit@paytm"
+            )
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
     
     def generate_daily_expenses(self, start_date: datetime, months: int):
-        """Generate realistic daily expenses"""
+        """Generate realistic daily expenses (excludes monthly subscriptions)"""
         print("Generating daily expenses...")
         
+        # NOTE: Monthly subscriptions (Spotify, Netflix, Amazon Prime, pharmacies) 
+        # are generated separately to ensure proper monthly intervals
         merchants = {
             "Food": [
                 ("Swiggy", "swiggy@paytm", 150, 800),
@@ -240,22 +374,15 @@ class TransactionGenerator:
             "Entertainment": [
                 ("BookMyShow", "bookmyshow@paytm", 200, 800),
                 ("PVR Cinemas", "pvr@paytm", 300, 1200),
-                ("Spotify", "spotify@paytm", 119, 119),
-                ("Amazon Prime", "primevideo@paytm", 299, 299),
-            ],
-            "Health": [
-                ("Apollo Pharmacy", "apollo@paytm", 100, 2000),
-                ("Medplus", "medplus@paytm", 150, 1500),
-                ("1mg", "1mg@paytm", 200, 2000),
-                ("Cult.fit", "cultfit@paytm", 999, 2999),
             ],
         }
         
         for month in range(months):
             base_date = start_date + timedelta(days=30 * month)
             
-            # Generate 150-170 random daily transactions per month
-            num_transactions = random.randint(150, 170)
+            # Generate 50-70 random daily transactions per month (reduced from 150-170)
+            # This keeps focus on recurring patterns
+            num_transactions = random.randint(50, 70)
             
             for _ in range(num_transactions):
                 day = random.randint(1, 28)
@@ -267,7 +394,7 @@ class TransactionGenerator:
                 # Choose category and merchant
                 category = random.choices(
                     list(merchants.keys()),
-                    weights=[35, 15, 20, 10, 10],  # Food 35%, Transport 15%, etc.
+                    weights=[40, 20, 30, 10],  # Food 40%, Transport 20%, Shopping 30%, Entertainment 10%
                 )[0]
                 
                 merchant_data = random.choice(merchants[category])
@@ -340,6 +467,7 @@ class TransactionGenerator:
         self.generate_semi_monthly_income(start_date, months)
         self.generate_monthly_variable(start_date, months)
         self.generate_utilities(start_date, months)
+        self.generate_monthly_healthcare(start_date, months)
         self.generate_daily_expenses(start_date, months)
         self.generate_seasonal_patterns(start_date, months)
         
