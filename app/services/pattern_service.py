@@ -271,6 +271,11 @@ class PatternService:
                 explanation=explanation
             )
             
+            # Skip if pattern was not saved (duplicate amount cluster)
+            if pattern is None:
+                logger.warning(f"[PATTERN_DISCOVERY] Pattern not saved (duplicate amount cluster), skipping")
+                continue
+            
             discovered.append({
                 'pattern': pattern,
                 'transactor': transactor,  # Include transactor object to avoid lazy loading
@@ -288,14 +293,17 @@ class PatternService:
         currency_id: uuid.UUID,
         candidate: PatternCandidate,
         explanation: Dict
-    ) -> RecurringPattern:
+    ) -> Optional[RecurringPattern]:
         """
         Save discovered pattern to database.
         Creates pattern, streak, initial obligation, and links transactions.
-        """
-        logger.debug(f"[PATTERN_SAVE] Checking for existing pattern: user={user_id}, transactor={transactor_id}, direction={direction}")
         
-        # Check if pattern already exists
+        Returns None if pattern is skipped due to duplicate amount cluster.
+        Checks for existing patterns with overlapping amount ranges to prevent duplicates.
+        """
+        logger.debug(f"[PATTERN_SAVE] Checking for existing pattern: user={user_id}, transactor={transactor_id}, direction={direction}, avg_amount={candidate.cluster.avg_amount}")
+        
+        # Check if pattern already exists (including amount range overlap check)
         existing_result = await self.db.execute(
             select(RecurringPattern).where(
                 RecurringPattern.user_id == user_id,
@@ -303,7 +311,58 @@ class PatternService:
                 RecurringPattern.direction == direction
             )
         )
-        existing = existing_result.scalar_one_or_none()
+        existing_patterns = existing_result.scalars().all()
+        
+        # If patterns exist, check for amount range overlap to prevent duplicates
+        existing = None
+        if existing_patterns:
+            candidate_avg = candidate.cluster.avg_amount
+            candidate_tolerance = max(
+                Decimal('75.00'),  # AMOUNT_TOLERANCE_ABSOLUTE
+                candidate_avg * Decimal('0.35')  # AMOUNT_TOLERANCE_PERCENT (35%)
+            )
+            
+            logger.debug(f"[PATTERN_SAVE] Found {len(existing_patterns)} existing patterns, checking for amount overlap")
+            
+            for pattern in existing_patterns:
+                # Get pattern's linked transactions to compute its amount range
+                linked_txns_result = await self.db.execute(
+                    select(Transaction).join(PatternTransaction).where(
+                        PatternTransaction.recurring_pattern_id == pattern.id
+                    )
+                )
+                linked_txns = linked_txns_result.scalars().all()
+                
+                if linked_txns:
+                    pattern_avg = sum(t.amount for t in linked_txns) / len(linked_txns)
+                    pattern_tolerance = max(
+                        Decimal('75.00'),
+                        pattern_avg * Decimal('0.35')
+                    )
+                    
+                    # Check if amount ranges overlap (using more lenient 50% threshold)
+                    amount_diff = abs(candidate_avg - pattern_avg)
+                    overlap_threshold = (candidate_tolerance + pattern_tolerance) / Decimal('2.0')
+                    overlap = amount_diff < overlap_threshold
+                    
+                    logger.debug(f"[PATTERN_SAVE] Pattern {pattern.id} check: "
+                                f"pattern_avg=₹{pattern_avg:.2f}, candidate_avg=₹{candidate_avg:.2f}, "
+                                f"diff=₹{amount_diff:.2f}, threshold=₹{overlap_threshold:.2f}, overlap={overlap}")
+                    
+                    if overlap:
+                        logger.info(f"[PATTERN_SAVE] Amount ranges overlap - updating pattern {pattern.id} instead of creating duplicate")
+                        existing = pattern
+                        break
+            
+            # If no overlap found but patterns exist, this is a distinct amount cluster
+            # Since DB constraint prevents multiple patterns for same (user, transactor, direction),
+            # skip this candidate to avoid constraint violation
+            if not existing and len(existing_patterns) > 0:
+                logger.warning(f"[PATTERN_SAVE] Distinct amount cluster detected (avg=₹{candidate_avg:.2f}) "
+                             f"but pattern already exists for this (user, transactor, direction). "
+                             f"Skipping to avoid duplicate constraint violation. "
+                             f"Consider removing unique constraint to support multiple amount-based patterns.")
+                return None  # Skip this pattern candidate
         
         if existing:
             # Update existing pattern
