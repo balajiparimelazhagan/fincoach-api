@@ -79,6 +79,28 @@ def run_migrations_online() -> None:
         with context.begin_transaction():
             context.run_migrations()
 
+        # Run post-migration synthetic data script using the existing connection
+        # so that all inserts occur in the same database as the migrations.  We
+        # adjust sys.path so that the `scripts` package can be imported when
+        # Alembic is executed from the alembic directory inside the container.
+        try:
+            import sys
+            import os as _os
+            root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
+            if root not in sys.path:
+                sys.path.insert(0, root)
+
+            from scripts.post_migration_synthetic_data import main as _post_main
+
+            # connection is a SQLAlchemy Connection; extract the raw DBAPI
+            # connection (psycopg2) so our helper can use it.
+            dbapi_conn = connection.connection
+            _post_main(dbapi_conn)
+            print("Post-migration synthetic data script completed")
+        except Exception as e:
+            # Log the error but do not interrupt migrations
+            print(f"Error running post-migration script: {e}")
+
 
 if context.is_offline_mode():
     run_migrations_offline()

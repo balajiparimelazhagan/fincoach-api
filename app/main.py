@@ -35,9 +35,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Logging middleware
-app.add_middleware(LoggingMiddleware)
-
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -46,6 +43,9 @@ app.add_middleware(
     allow_methods=["DELETE", "GET", "POST", "PUT", "PATCH"],
     allow_headers=["*"],
 )
+
+# Logging middleware
+app.add_middleware(LoggingMiddleware)
 
 # Global exception handler
 @app.exception_handler(AppException)

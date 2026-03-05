@@ -9,32 +9,44 @@ import random
 from datetime import datetime, timedelta
 from typing import List, Dict, Tuple
 
-# Constants from existing data
-USER_ID = "6cb253ea-e4c8-4039-a0a1-ec6f7d6ffc40"
-CURRENCY_ID = "7fb00987-3914-4305-8a01-c175b7cee768"  # INR
+# Constants from existing data (updated to use provided user)
+USER_ID = "f62c3d4e-8373-4de5-9aa8-57facebdb001"
+CURRENCY_ID = "e3f9d656-5c09-46ae-ac17-0592bcca4ddc"  # INR
 
 # Mock data for SQL generation
 ACCOUNTS = {
-    "hdfc_savings_4319": "de209d7f-926b-4757-8d4f-a083fb48fb33",
-    "hdfc_credit_7420": "7fdc9472-cba7-4945-b3f9-3db48cb116fb",
-    "hdfc_savings_7710": "320fc46e-170a-4607-a377-11ed800901e0",
-    "hdfc_savings_6834": "9bd6fbd7-7f15-4e51-96f4-8662467d24d1",
+    "hdfc_savings_4319": "4513d259-02bc-4647-91f6-2754e3d3e4a7",
+    "hdfc_savings_7710": "af2a508e-1f2f-4f78-bc1c-63d7ed429834",
+    "hdfc_savings_6834": "9b67a4d8-e3f2-43ac-9aba-8166cacc0439",
+    "icici_credit_4000": "592f36e6-af54-44b4-9f46-5dd94f938702",
+    "hdfc_savings_1879": "0b188467-0125-4cd5-8daf-8a6997183391",
+    "hdfc_credit_7420": "fce48cfc-829f-424d-998d-814a9d2d56de",
+    "hdfc_savings_6216": "ff2a842a-69b2-4580-a2db-8fdc827db722",
+    "hdfc_savings_2383": "17b95b77-9a27-4af9-906e-3b475cd037ad",
 }
 
 CATEGORIES = {
-    "Housing": "31a90d3c-d86c-4bf0-aa59-39e11416b774",
-    "Utilities": "f390b3fa-0c5f-40d1-8749-b09c237335d5",
-    "Food": "e4270e71-d112-4d45-9f08-83c8bfb2821c",
-    "Transport": "593e57e7-4231-42c9-ba9e-0f71b1c18224",
-    "Shopping": "f390b3fa-0c5f-40d1-8749-b09c237335d5",
-    "Subscriptions": "abf8907b-ffcc-40c0-a904-39a8735dd3c8",
-    "Health": "79cbaa9d-505d-4d5d-a064-aec1ef784dcf",
-    "Entertainment": "c72d4594-a7d0-47ba-b5af-69a85a87e8cb",
-    "Travel": "89e630d2-f23e-4e8f-b6d1-11dda8fdbb2e",
-    "Income": "89e630d2-f23e-4e8f-b6d1-11dda8fdbb2e",
-    "Savings": "89e630d2-f23e-4e8f-b6d1-11dda8fdbb2e",
-    "Loans": "89e630d2-f23e-4e8f-b6d1-11dda8fdbb2e",
-    "Transfers": "89e630d2-f23e-4e8f-b6d1-11dda8fdbb2e",
+    "Housing": "b600dc65-ead3-4437-b898-50b05c63e93b",
+    "Utilities": "115953d1-34f7-41bb-afb8-8bbaf0388e24",
+    "Food": "2698e700-68b0-46ea-a812-f81547603d7e",
+    "Transport": "a0250e9f-99d5-44c3-933b-e23d4383fc57",
+    "Shopping": "e3b221b0-6ae0-4595-8f0e-2a512830834c",
+    "Subscriptions": "c3088928-1790-42f3-9338-b1bf58233166",
+    "Health": "1c4fcdf9-f021-4776-a3c8-98e370abcfe0",
+    "Entertainment": "05174f56-9cae-49f9-a7b0-d215dd59e6ed",
+    "Travel": "2bcd61e5-f4e4-478d-9e85-9b4d73493545",
+    "Personal Care": "f5ca67b9-d0cb-4d94-8c27-3bcaf6ebf313",
+    "Education": "6d7be686-7e95-4c23-98ff-5ffcc9eda78d",
+    "Family & Relationships": "cca72189-04e4-44a7-8cb7-3d3309643c62",
+    "Income": "1f1cd1ad-0a98-46fe-bb92-2fded8ad35b5",
+    "Savings": "5a24168b-ad2e-4442-b17d-92ad45888138",
+    "Loans & EMIs": "dddf8adb-9e78-4be2-a81e-2c9d6c713d91",
+    "Loans": "dddf8adb-9e78-4be2-a81e-2c9d6c713d91",
+    "Transfers": "3759b79b-47f1-4a6b-92e7-5812027f6a19",
+    "Fees & Charges": "0c6c2036-78d1-4f7a-b2e8-f8e92a72c90d",
+    "Taxes": "f04d6902-8779-4080-9978-885d6b330fcc",
+    "Donations": "53dc38ac-e49b-4880-883e-ebf3402b4a81",
+    "Miscellaneous": "febae2ab-9e5f-4f94-bae5-e6013ac65432",
 }
 
 # ======================
@@ -522,11 +534,25 @@ class TransactionGenerator:
                     account="hdfc_credit_7420"
                 )
     
-    def generate_all(self):
-        """Generate all transaction types"""
-        start_date = datetime(2025, 8, 1)
-        months = 6
-        
+    def generate_all(self, start_date: datetime | None = None, months: int = 6):
+        """Generate all transaction types.
+
+        ``start_date`` is the first day of the period to simulate.  If it is
+        ``None`` transactions are generated backwards from the current month
+        for the specified number of months.  ``months`` defaults to six.
+        """
+
+        if start_date is None:
+            now = datetime.now()
+            current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            # Go back (months - 1) months to get the start
+            for _ in range(months - 1):
+                if current_month_start.month == 1:
+                    current_month_start = current_month_start.replace(year=current_month_start.year - 1, month=12)
+                else:
+                    current_month_start = current_month_start.replace(month=current_month_start.month - 1)
+            start_date = current_month_start
+
         self.generate_fixed_recurring(start_date, months)
         self.generate_semi_monthly_income(start_date, months)
         self.generate_monthly_variable(start_date, months)
@@ -541,25 +567,36 @@ class TransactionGenerator:
     def export_sql(self, filename: str):
         """Export as SQL INSERT statements"""
         mock_accounts = [
-            {"id": "de209d7f-926b-4757-8d4f-a083fb48fb33", "last_four": "4319", "bank": "HDFC Bank", "type": "savings"},
-            {"id": "7fdc9472-cba7-4945-b3f9-3db48cb116fb", "last_four": "7420", "bank": "HDFC Bank", "type": "credit"},
-            {"id": "320fc46e-170a-4607-a377-11ed800901e0", "last_four": "7710", "bank": "HDFC Bank", "type": "savings"},
-            {"id": "9bd6fbd7-7f15-4e51-96f4-8662467d24d1", "last_four": "6834", "bank": "HDFC Bank", "type": "savings"},
+            {"id": "4513d259-02bc-4647-91f6-2754e3d3e4a7", "last_four": "4319", "bank": "HDFC Bank", "type": "savings"},
+            {"id": "af2a508e-1f2f-4f78-bc1c-63d7ed429834", "last_four": "7710", "bank": "HDFC Bank", "type": "savings"},
+            {"id": "9b67a4d8-e3f2-43ac-9aba-8166cacc0439", "last_four": "6834", "bank": "HDFC Bank", "type": "savings"},
+            {"id": "592f36e6-af54-44b4-9f46-5dd94f938702", "last_four": "4000", "bank": "ICICI Bank", "type": "credit"},
+            {"id": "0b188467-0125-4cd5-8daf-8a6997183391", "last_four": "1879", "bank": "HDFC Bank", "type": "savings"},
+            {"id": "fce48cfc-829f-424d-998d-814a9d2d56de", "last_four": "7420", "bank": "HDFC Bank", "type": "credit"},
+            {"id": "ff2a842a-69b2-4580-a2db-8fdc827db722", "last_four": "6216", "bank": "HDFC Bank", "type": "savings"},
+            {"id": "17b95b77-9a27-4af9-906e-3b475cd037ad", "last_four": "2383", "bank": "HDFC Bank", "type": "savings"},
         ]
         mock_categories = {
-            "Housing": "31a90d3c-d86c-4bf0-aa59-39e11416b774",
-            "Utilities": "f390b3fa-0c5f-40d1-8749-b09c237335d5",
-            "Food": "e4270e71-d112-4d45-9f08-83c8bfb2821c",
-            "Transport": "593e57e7-4231-42c9-ba9e-0f71b1c18224",
-            "Shopping": "f390b3fa-0c5f-40d1-8749-b09c237335d5",
-            "Subscriptions": "abf8907b-ffcc-40c0-a904-39a8735dd3c8",
-            "Health": "79cbaa9d-505d-4d5d-a064-aec1ef784dcf",
-            "Entertainment": "c72d4594-a7d0-47ba-b5af-69a85a87e8cb",
-            "Travel": "89e630d2-f23e-4e8f-b6d1-11dda8fdbb2e",
-            "Income": "89e630d2-f23e-4e8f-b6d1-11dda8fdbb2e",
-            "Savings": "89e630d2-f23e-4e8f-b6d1-11dda8fdbb2e",
-            "Loans": "89e630d2-f23e-4e8f-b6d1-11dda8fdbb2e",
-            "Transfers": "89e630d2-f23e-4e8f-b6d1-11dda8fdbb2e",
+            "Housing": "b600dc65-ead3-4437-b898-50b05c63e93b",
+            "Utilities": "115953d1-34f7-41bb-afb8-8bbaf0388e24",
+            "Food": "2698e700-68b0-46ea-a812-f81547603d7e",
+            "Transport": "a0250e9f-99d5-44c3-933b-e23d4383fc57",
+            "Shopping": "e3b221b0-6ae0-4595-8f0e-2a512830834c",
+            "Subscriptions": "c3088928-1790-42f3-9338-b1bf58233166",
+            "Health": "1c4fcdf9-f021-4776-a3c8-98e370abcfe0",
+            "Entertainment": "05174f56-9cae-49f9-a7b0-d215dd59e6ed",
+            "Travel": "2bcd61e5-f4e4-478d-9e85-9b4d73493545",
+            "Income": "1f1cd1ad-0a98-46fe-bb92-2fded8ad35b5",
+            "Savings": "5a24168b-ad2e-4442-b17d-92ad45888138",
+            "Loans": "dddf8adb-9e78-4be2-a81e-2c9d6c713d91",
+            "Transfers": "3759b79b-47f1-4a6b-92e7-5812027f6a19",
+            "Personal Care": "f5ca67b9-d0cb-4d94-8c27-3bcaf6ebf313",
+            "Education": "6d7be686-7e95-4c23-98ff-5ffcc9eda78d",
+            "Family & Relationships": "cca72189-04e4-44a7-8cb7-3d3309643c62",
+            "Fees & Charges": "0c6c2036-78d1-4f7a-b2e8-f8e92a72c90d",
+            "Taxes": "f04d6902-8779-4080-9978-885d6b330fcc",
+            "Donations": "53dc38ac-e49b-4880-883e-ebf3402b4a81",
+            "Miscellaneous": "febae2ab-9e5f-4f94-bae5-e6013ac65432",
         }
         with open(filename, 'w') as f:
             f.write("-- Synthetic Transaction Data\n")
@@ -634,8 +671,10 @@ class TransactionGenerator:
 
 if __name__ == "__main__":
     generator = TransactionGenerator()
+    # start on the current month by default; caller may override by passing an
+    # explicit date if needed (e.g. for testing or backfilling).
     generator.generate_all()
-    
+
     # Export to files
     generator.export_sql("/Users/balaji/Desktop/synthetic_transactions.sql")
     generator.export_csv(

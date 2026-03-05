@@ -1,6 +1,8 @@
 uvicorn
 fastapi
 starlette
+requests
+pytest  # required for running the test suite
 sqlalchemy[asyncio]
 databases
 psycopg2
