@@ -18,8 +18,8 @@ class UpdateScope(str, Enum):
 
 class TransactionUpdateRequest(BaseModel):
     """Schema for updating a single transaction."""
-    category_id: Optional[str] = Field(None, description="New category ID")
-    transactor_label: Optional[str] = Field(None, description="New transactor label")
+    category_id: Optional[str] = Field(None, max_length=100, description="New category ID")
+    transactor_label: Optional[str] = Field(None, max_length=200, description="New transactor label")
 
     class Config:
         json_schema_extra = {
@@ -32,8 +32,8 @@ class TransactionUpdateRequest(BaseModel):
 
 class BulkTransactionUpdateRequest(BaseModel):
     """Schema for bulk updating transactions."""
-    category_id: Optional[str] = Field(None, description="New category ID")
-    transactor_label: Optional[str] = Field(None, description="New transactor label")
+    category_id: Optional[str] = Field(None, max_length=100, description="New category ID")
+    transactor_label: Optional[str] = Field(None, max_length=200, description="New transactor label")
     update_scope: UpdateScope = Field(..., description="Scope of the update operation")
 
     @validator('update_scope')
@@ -94,7 +94,7 @@ class AccountResponse(BaseModel):
 class TransactionResponse(BaseModel):
     """Schema for transaction response."""
     id: str
-    amount: Optional[int] = None
+    amount: Optional[float] = None
     transaction_id: Optional[str] = None
     type: str
     date: Optional[datetime] = None

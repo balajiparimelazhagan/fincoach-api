@@ -8,7 +8,7 @@ from typing import List, Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 from fastapi import HTTPException
 
 from app.models.transaction import Transaction
@@ -79,9 +79,11 @@ class TransactionQueryBuilder:
     
     async def count(self) -> int:
         """Get count of transactions matching filters."""
-        stmt = select(Transaction).filter(and_(*self.conditions))
+        stmt = select(func.count()).select_from(
+            select(Transaction).filter(and_(*self.conditions)).subquery()
+        )
         result = await self.session.execute(stmt)
-        return len(result.scalars().all())
+        return result.scalar_one()
     
     async def fetch(
         self,
@@ -286,11 +288,13 @@ class TransactionUpdateService:
         if category_id is not None:
             for tx in transactions_to_update:
                 tx.category_id = category_id
-                updated_count += 1
-        
+            updated_count = len(transactions_to_update)
+
         # Update transactor label (affects all transactions with this transactor)
         if transactor_label is not None and original_tx.transactor:
             original_tx.transactor.label = transactor_label
+            if updated_count == 0:
+                updated_count = len(transactions_to_update)
         
         await self.session.commit()
         await self.session.refresh(original_tx, ['transactor', 'category', 'account'])

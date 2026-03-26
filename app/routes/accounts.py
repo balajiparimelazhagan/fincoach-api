@@ -52,7 +52,7 @@ async def list_accounts_route(
     account_type: Optional[str] = Query(default=None, description="Filter by account type"),
     bank_name: Optional[str] = Query(default=None, description="Filter by bank name"),
     limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=50000),
     session: AsyncSession = Depends(get_db_session),
 ):
     """List all accounts for the authenticated user."""

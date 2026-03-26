@@ -18,7 +18,7 @@ def serialize_transaction(transaction: Transaction) -> Dict[str, Any]:
     """
     return {
         "id": transaction.id,
-        "amount": int(transaction.amount) if transaction.amount is not None else None,
+        "amount": float(transaction.amount) if transaction.amount is not None else None,
         "transaction_id": transaction.transaction_id,
         "type": transaction.type,
         "date": transaction.date.isoformat() if transaction.date else None,

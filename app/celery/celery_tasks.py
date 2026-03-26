@@ -76,22 +76,23 @@ def update_recurring_streak(self, user_id: str, transactor_id: str, direction: s
                 try:
                     from app.services.pattern_service import PatternService
                     from sqlalchemy.orm import Session
-                    
-                    # Create sync session from async
-                    sync_db = Session(bind=db.sync_connection())
-                    pattern_service = PatternService(sync_db)
-                    
-                    result = pattern_service.process_new_transaction(transaction.id)
-                    logger.info(f"[PATTERN] Processing result: {result}")
-                    
-                    return {
-                        'status': 'processed',
-                        'matched': result.get('matched', False),
-                        'matches': result.get('matches', [])
-                    }
+                    from app.db import engine  # sync engine
+
+                    sync_db = Session(bind=engine)
+                    try:
+                        pattern_service = PatternService(sync_db)
+                        result = pattern_service.process_new_transaction(transaction.id)
+                        logger.info(f"[PATTERN] Processing result: {result}")
+                        return {
+                            'status': 'processed',
+                            'matched': result.get('matched', False),
+                            'matches': result.get('matches', [])
+                        }
+                    finally:
+                        sync_db.close()
                 except Exception as e:
                     logger.error(f"[PATTERN] Error in pattern processing: {e}", exc_info=True)
-                    return {'status': 'error', 'error': str(e)}
+                    raise  # re-raise so the outer handler can retry
         
         try:
             loop = asyncio.get_event_loop()

@@ -10,7 +10,7 @@ import json
 import secrets
 import hashlib
 import base64
-import requests
+import httpx
 from datetime import datetime, timedelta
 
 from app.config import settings
@@ -154,18 +154,19 @@ async def google_callback(
         logger.info("Successfully decoded PKCE verifier from state")
 
         # Exchange authorization code for tokens using PKCE verifier
-        token_response = requests.post(
-            "https://oauth2.googleapis.com/token",
-            data={
-                "client_id": settings.GOOGLE_CLIENT_ID,
-                "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                "code": code,
-                "grant_type": "authorization_code",
-                "redirect_uri": settings.GOOGLE_REDIRECT_URI,
-                "code_verifier": verifier,  # ⭐ PKCE verifier from state
-            },
-        )
-        
+        async with httpx.AsyncClient() as http_client:
+            token_response = await http_client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "client_id": settings.GOOGLE_CLIENT_ID,
+                    "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                    "code": code,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+                    "code_verifier": verifier,  # PKCE verifier from state
+                },
+            )
+
         if token_response.status_code != 200:
             error_data = token_response.json()
             logger.error(f"Token exchange failed: {error_data}")

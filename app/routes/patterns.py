@@ -4,6 +4,7 @@ Patterns API Routes
 Endpoints for recurring pattern analysis and obligation tracking.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from pydantic import BaseModel, Field
@@ -107,20 +108,23 @@ async def get_pattern(
     Get a specific pattern by ID.
     """
     from app.models import RecurringPattern
-    
-    pattern = db.query(RecurringPattern).filter(
-        RecurringPattern.id == uuid.UUID(pattern_id),
-        RecurringPattern.user_id == current_user.id
-    ).first()
-    
+
+    result = await db.execute(
+        select(RecurringPattern).where(
+            RecurringPattern.id == uuid.UUID(pattern_id),
+            RecurringPattern.user_id == current_user.id
+        )
+    )
+    pattern = result.scalar_one_or_none()
+
     if not pattern:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pattern not found"
         )
-    
+
     pattern_dict = pattern.to_dict()
-    
+
     # Add related info
     if pattern.transactor:
         pattern_dict['transactor'] = {
@@ -150,19 +154,22 @@ async def get_pattern_obligations(
     Get obligations for a specific pattern.
     """
     from app.models import RecurringPattern
-    
+
     # Verify pattern belongs to user
-    pattern = db.query(RecurringPattern).filter(
-        RecurringPattern.id == uuid.UUID(pattern_id),
-        RecurringPattern.user_id == current_user.id
-    ).first()
-    
+    result = await db.execute(
+        select(RecurringPattern).where(
+            RecurringPattern.id == uuid.UUID(pattern_id),
+            RecurringPattern.user_id == current_user.id
+        )
+    )
+    pattern = result.scalar_one_or_none()
+
     if not pattern:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pattern not found"
         )
-    
+
     service = PatternService(db)
     obligations = service.get_pattern_obligations(
         pattern_id=uuid.UUID(pattern_id),
@@ -270,18 +277,21 @@ async def update_pattern(
     - Changing amount behavior
     """
     from app.models import RecurringPattern
-    
-    pattern = db.query(RecurringPattern).filter(
-        RecurringPattern.id == uuid.UUID(pattern_id),
-        RecurringPattern.user_id == current_user.id
-    ).first()
-    
+
+    result = await db.execute(
+        select(RecurringPattern).where(
+            RecurringPattern.id == uuid.UUID(pattern_id),
+            RecurringPattern.user_id == current_user.id
+        )
+    )
+    pattern = result.scalar_one_or_none()
+
     if not pattern:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pattern not found"
         )
-    
+
     # Update allowed fields
     if request.status:
         if request.status not in ['ACTIVE', 'PAUSED', 'BROKEN']:
@@ -291,9 +301,9 @@ async def update_pattern(
             )
         pattern.status = request.status
         pattern.last_evaluated_at = datetime.utcnow()
-    
-    db.commit()
-    
+
+    await db.commit()
+
     return {
         "status": "success",
         "pattern": pattern.to_dict()
@@ -317,21 +327,24 @@ async def delete_pattern(
     Use with caution.
     """
     from app.models import RecurringPattern
-    
-    pattern = db.query(RecurringPattern).filter(
-        RecurringPattern.id == uuid.UUID(pattern_id),
-        RecurringPattern.user_id == current_user.id
-    ).first()
-    
+
+    result = await db.execute(
+        select(RecurringPattern).where(
+            RecurringPattern.id == uuid.UUID(pattern_id),
+            RecurringPattern.user_id == current_user.id
+        )
+    )
+    pattern = result.scalar_one_or_none()
+
     if not pattern:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pattern not found"
         )
-    
-    db.delete(pattern)
-    db.commit()
-    
+
+    await db.delete(pattern)
+    await db.commit()
+
     return {
         "status": "success",
         "message": "Pattern deleted"
