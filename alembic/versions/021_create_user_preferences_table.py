@@ -20,7 +20,7 @@ def upgrade():
     # Create user_preferences table
     op.create_table(
         'user_preferences',
-        sa.Column('id', postgresql.UUID(as_uuid=False), primary_key=True),
+        sa.Column('id', postgresql.UUID(as_uuid=False), primary_key=True, server_default=sa.text('gen_random_uuid()')),
         sa.Column('user_id', postgresql.UUID(as_uuid=False), nullable=False),
         sa.Column('ui_preferences', postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default='{}'),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),

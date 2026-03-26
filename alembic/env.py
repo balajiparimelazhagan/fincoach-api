@@ -90,7 +90,7 @@ def run_migrations_online() -> None:
             if root not in sys.path:
                 sys.path.insert(0, root)
 
-            from scripts.post_migration_synthetic_data import main as _post_main
+            from scripts.synthetic_data_seeder import main as _post_main
 
             # connection is a SQLAlchemy Connection; extract the raw DBAPI
             # connection (psycopg2) so our helper can use it.
