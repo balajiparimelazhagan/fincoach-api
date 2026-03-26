@@ -10,7 +10,7 @@ from app.dependencies import get_current_user
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 # ============================================================================
-# STATISTICS ENDPOINTS
+# CASHFLOW ENDPOINTS
 # ============================================================================
 
 @router.get("/stats/summary")
@@ -119,3 +119,45 @@ async def get_comprehensive_stats_endpoint(
         date_to=date_to_obj,
     )
     return stats
+
+
+@router.get("/cashflow/daily-summary")
+async def get_cashflow_daily_summary_endpoint(
+    year: int = Query(..., ge=2000, le=2100, description="Year (e.g. 2026)"),
+    month: int = Query(..., ge=1, le=12, description="Month 1–12"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """
+    Per-day cashflow summary for the given month.
+
+    Returns a list with one entry per calendar day containing:
+    - day: day-of-month (1–28/29/30/31)
+    - income: total income received that day
+    - expense: total expenses paid that day
+    - predicted_bills: sum of EXPECTED obligations due that day
+    """
+    from app.services.stats_service import get_cashflow_daily_summary
+    return await get_cashflow_daily_summary(session, str(current_user.id), year, month)
+
+
+@router.get("/cashflow/category-budgets")
+async def get_category_budgets_endpoint(
+    year: int = Query(..., ge=2000, le=2100, description="Year (e.g. 2026)"),
+    month: int = Query(..., ge=1, le=12, description="Month 1–12"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """
+    Current-month category spending vs 3-month historical average.
+
+    Each item contains:
+    - category_id, category_name
+    - has_pattern: whether this category has a fixed recurring expense pattern
+    - current_actual: total spent this month
+    - avg_last_3_months: average monthly spend over the previous 3 months
+    - over_budget: True if current_actual > avg_last_3_months
+    - over_amount: how much over the average (0 if under)
+    """
+    from app.services.stats_service import get_category_budgets
+    return await get_category_budgets(session, str(current_user.id), year, month)

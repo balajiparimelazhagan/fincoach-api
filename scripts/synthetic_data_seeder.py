@@ -528,6 +528,15 @@ def main(conn=None) -> None:
             user_id = get_or_create_user(cur, TEST_USER_EMAIL)
             print(f"  User ID: {user_id}")
 
+            # ── Guard: skip if data already seeded ───────────────
+            cur.execute(
+                "SELECT COUNT(*) FROM transactions WHERE user_id = %s", (user_id,)
+            )
+            if cur.fetchone()[0] > 0:
+                print("Synthetic data already present — skipping seeder.")
+                conn.commit()
+                return
+
             # ── 2. Accounts & categories ──────────────────────────
             print("Ensuring accounts exist …")
             ensure_accounts(cur, user_id)

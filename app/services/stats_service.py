@@ -2,7 +2,8 @@
 Statistics Service
 Handles calculation of income, expense, savings, and category-based spending.
 """
-from datetime import datetime
+from calendar import monthrange
+from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -11,6 +12,8 @@ from sqlalchemy import and_
 
 from app.models.transaction import Transaction
 from app.models.category import Category
+from app.models.pattern_obligation import PatternObligation
+from app.models.recurring_pattern import RecurringPattern
 from app.logging_config import get_logger
 from app.utils.date_utils import get_month_date_range
 
@@ -161,3 +164,205 @@ async def get_comprehensive_stats(
         **period_stats,
         "categories": category_spending,
     }
+
+
+async def get_cashflow_daily_summary(
+    session: AsyncSession,
+    user_id: str,
+    year: int,
+    month: int,
+) -> List[Dict[str, Any]]:
+    """
+    Return per-day cashflow summary for the given month.
+
+    Args:
+        session: SQLAlchemy async session
+        user_id: UUID string of the user
+        year: 4-digit year
+        month: 1-indexed month (1=January … 12=December)
+
+    Returns:
+        List of {day, income, expense, predicted_bills} for every day in the month.
+    """
+    last_day = monthrange(year, month)[1]
+    month_start = datetime(year, month, 1)
+    month_end = datetime(year, month, last_day, 23, 59, 59)
+
+    # Actual transactions
+    tx_stmt = select(Transaction).filter(
+        and_(
+            Transaction.user_id == user_id,
+            Transaction.date >= month_start,
+            Transaction.date <= month_end,
+        )
+    )
+    tx_result = await session.execute(tx_stmt)
+    transactions = tx_result.scalars().all()
+
+    # EXPECTED obligations (predicted bills) in this month
+    obl_stmt = (
+        select(PatternObligation)
+        .join(RecurringPattern, PatternObligation.recurring_pattern_id == RecurringPattern.id)
+        .filter(
+            and_(
+                RecurringPattern.user_id == user_id,
+                PatternObligation.expected_date >= month_start,
+                PatternObligation.expected_date <= month_end,
+                PatternObligation.status == 'EXPECTED',
+            )
+        )
+    )
+    obl_result = await session.execute(obl_stmt)
+    obligations = obl_result.scalars().all()
+
+    # Build per-day buckets
+    daily: Dict[int, Dict[str, float]] = {}
+
+    def _bucket(day: int) -> Dict[str, float]:
+        if day not in daily:
+            daily[day] = {'income': 0.0, 'expense': 0.0, 'predicted_bills': 0.0}
+        return daily[day]
+
+    for tx in transactions:
+        b = _bucket(tx.date.day)
+        if tx.type == 'income':
+            b['income'] += float(tx.amount)
+        elif tx.type == 'expense':
+            b['expense'] += abs(float(tx.amount))
+
+    for obl in obligations:
+        b = _bucket(obl.expected_date.day)
+        if obl.expected_min_amount and obl.expected_max_amount:
+            amount = (float(obl.expected_min_amount) + float(obl.expected_max_amount)) / 2
+        elif obl.expected_min_amount:
+            amount = float(obl.expected_min_amount)
+        elif obl.expected_max_amount:
+            amount = float(obl.expected_max_amount)
+        else:
+            amount = 0.0
+        b['predicted_bills'] += amount
+
+    return [
+        {
+            'day': day,
+            'income': round(daily.get(day, {}).get('income', 0)),
+            'expense': round(daily.get(day, {}).get('expense', 0)),
+            'predicted_bills': round(daily.get(day, {}).get('predicted_bills', 0)),
+        }
+        for day in range(1, last_day + 1)
+    ]
+
+
+async def get_category_budgets(
+    session: AsyncSession,
+    user_id: str,
+    year: int,
+    month: int,
+) -> List[Dict[str, Any]]:
+    """
+    Return category spending for the given month vs 3-month historical average.
+
+    For each category that has expense transactions in the selected month OR the
+    prior 3 months, returns:
+    - category_id, category_name
+    - has_pattern: whether any transactor in this category has an active expense pattern
+    - current_actual: total spent in the selected month
+    - avg_last_3_months: average monthly spend over the 3 months before the selected month
+    - over_budget: True if current_actual > avg_last_3_months
+    - over_amount: amount by which the user is over their average (0 if under)
+    """
+    curr_start, curr_end = get_month_date_range(datetime(year, month, 1))
+
+    # Start of 3 months before the selected month
+    hist_month = month - 3
+    hist_year = year
+    if hist_month <= 0:
+        hist_month += 12
+        hist_year -= 1
+    hist_start = datetime(hist_year, hist_month, 1)
+
+    # Current month expense transactions
+    curr_stmt = select(Transaction).filter(
+        and_(
+            Transaction.user_id == user_id,
+            Transaction.type == 'expense',
+            Transaction.date >= curr_start,
+            Transaction.date <= curr_end,
+        )
+    ).options(joinedload(Transaction.category))
+    curr_result = await session.execute(curr_stmt)
+    curr_txs = curr_result.scalars().unique().all()
+
+    # Last 3 months expense transactions
+    hist_stmt = select(Transaction).filter(
+        and_(
+            Transaction.user_id == user_id,
+            Transaction.type == 'expense',
+            Transaction.date >= hist_start,
+            Transaction.date < curr_start,
+        )
+    ).options(joinedload(Transaction.category))
+    hist_result = await session.execute(hist_stmt)
+    hist_txs = hist_result.scalars().unique().all()
+
+    # Active expense pattern transactor IDs
+    pat_stmt = select(RecurringPattern).filter(
+        and_(
+            RecurringPattern.user_id == user_id,
+            RecurringPattern.status == 'ACTIVE',
+            RecurringPattern.direction.in_(['expense', 'DEBIT']),
+        )
+    )
+    pat_result = await session.execute(pat_stmt)
+    patterns = pat_result.scalars().all()
+    expense_pattern_transactor_ids = {str(p.transactor_id) for p in patterns}
+
+    # Aggregate current month by category
+    curr_by_cat: Dict[str, Dict] = {}
+    for tx in curr_txs:
+        cat_key = str(tx.category_id) if tx.category_id else '__uncategorized__'
+        cat_name = tx.category.label if tx.category else 'Uncategorized'
+        if cat_key not in curr_by_cat:
+            curr_by_cat[cat_key] = {'name': cat_name, 'total': 0.0, 'has_pattern': False}
+        curr_by_cat[cat_key]['total'] += abs(float(tx.amount))
+        if tx.transactor_id and str(tx.transactor_id) in expense_pattern_transactor_ids:
+            curr_by_cat[cat_key]['has_pattern'] = True
+
+    # Aggregate historical by category (also collect names + has_pattern for history-only rows)
+    hist_by_cat: Dict[str, float] = {}
+    hist_cat_names: Dict[str, str] = {}
+    hist_has_pattern: Dict[str, bool] = {}
+    for tx in hist_txs:
+        cat_key = str(tx.category_id) if tx.category_id else '__uncategorized__'
+        hist_by_cat[cat_key] = hist_by_cat.get(cat_key, 0.0) + abs(float(tx.amount))
+        if cat_key not in hist_cat_names:
+            hist_cat_names[cat_key] = tx.category.label if tx.category else 'Uncategorized'
+        if tx.transactor_id and str(tx.transactor_id) in expense_pattern_transactor_ids:
+            hist_has_pattern[cat_key] = True
+
+    # Union of current-month and historical categories so we never miss a category
+    all_cat_keys = set(curr_by_cat.keys()) | set(hist_by_cat.keys())
+
+    result = []
+    for cat_key in all_cat_keys:
+        curr_data = curr_by_cat.get(cat_key, {
+            'name': hist_cat_names.get(cat_key, 'Uncategorized'),
+            'total': 0.0,
+            'has_pattern': hist_has_pattern.get(cat_key, False),
+        })
+        hist_total = hist_by_cat.get(cat_key, 0.0)
+        avg_3m = round(hist_total / 3) if hist_total > 0 else 0
+        current = round(curr_data['total'])
+        over_amount = max(0, current - avg_3m) if avg_3m > 0 else 0
+
+        result.append({
+            'category_id': None if cat_key == '__uncategorized__' else cat_key,
+            'category_name': curr_data['name'],
+            'has_pattern': curr_data['has_pattern'],
+            'current_actual': current,
+            'avg_last_3_months': avg_3m,
+            'over_budget': over_amount > 0,
+            'over_amount': over_amount,
+        })
+
+    return sorted(result, key=lambda x: x['current_actual'], reverse=True)
