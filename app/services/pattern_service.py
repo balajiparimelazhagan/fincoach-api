@@ -553,7 +553,9 @@ class PatternService:
             if pattern.transactor:
                 pattern_dict['transactor'] = {
                     'id': str(pattern.transactor.id),
-                    'name': pattern.transactor.name
+                    'name': pattern.transactor.name,
+                    'label': pattern.transactor.label,
+                    'picture': pattern.transactor.picture,
                 }
             
             # Add streak info
@@ -597,8 +599,11 @@ class PatternService:
         """Get all upcoming obligations for a user"""
         cutoff_date = datetime.utcnow() + timedelta(days=days_ahead)
 
+        # Load obligations with patterns only (chained selectinload on transactor
+        # is unreliable due to UUID type mismatch between Transactor.id and
+        # RecurringPattern.transactor_id — fetch transactors separately instead)
         stmt = select(PatternObligation).options(
-            selectinload(PatternObligation.pattern).selectinload(RecurringPattern.transactor),
+            selectinload(PatternObligation.pattern),
         ).join(
             RecurringPattern
         ).where(
@@ -610,14 +615,31 @@ class PatternService:
         result = await self.db.execute(stmt)
         obligations = result.scalars().all()
 
+        # Collect transactor IDs and fetch them in one query
+        transactor_ids = [
+            str(obl.pattern.transactor_id)
+            for obl in obligations
+            if obl.pattern and obl.pattern.transactor_id
+        ]
+        transactor_map: Dict[str, Transactor] = {}
+        if transactor_ids:
+            tx_result = await self.db.execute(
+                select(Transactor).where(Transactor.id.in_(transactor_ids))
+            )
+            for t in tx_result.scalars().all():
+                transactor_map[str(t.id)] = t
+
         rows = []
         for obl in obligations:
             obl_dict = obl.to_dict()
             obl_dict['pattern'] = obl.pattern.to_dict() if obl.pattern else None
+            transactor = transactor_map.get(str(obl.pattern.transactor_id)) if obl.pattern else None
             obl_dict['transactor'] = {
-                'id': str(obl.pattern.transactor.id),
-                'name': obl.pattern.transactor.name
-            } if obl.pattern and obl.pattern.transactor else None
+                'id': str(transactor.id),
+                'name': transactor.name,
+                'label': transactor.label,
+                'picture': transactor.picture,
+            } if transactor else None
             rows.append(obl_dict)
 
         return rows

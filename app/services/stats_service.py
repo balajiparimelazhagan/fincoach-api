@@ -5,12 +5,18 @@ Handles calculation of income, expense, savings, and category-based spending.
 from calendar import monthrange
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo  # type: ignore
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
 from sqlalchemy import and_
 
 from app.models.transaction import Transaction
+
+IST = ZoneInfo("Asia/Kolkata")
 from app.models.category import Category
 from app.models.pattern_obligation import PatternObligation
 from app.models.recurring_pattern import RecurringPattern
@@ -185,8 +191,9 @@ async def get_cashflow_daily_summary(
         List of {day, income, expense, predicted_bills} for every day in the month.
     """
     last_day = monthrange(year, month)[1]
-    month_start = datetime(year, month, 1)
-    month_end = datetime(year, month, last_day, 23, 59, 59)
+    # Use IST-aware boundaries so UTC-stored TIMESTAMPTZ values are filtered correctly
+    month_start = datetime(year, month, 1, tzinfo=IST)
+    month_end = datetime(year, month, last_day, 23, 59, 59, tzinfo=IST)
 
     # Actual transactions
     tx_stmt = select(Transaction).filter(
@@ -224,7 +231,9 @@ async def get_cashflow_daily_summary(
         return daily[day]
 
     for tx in transactions:
-        b = _bucket(tx.date.day)
+        # Convert to IST so the day boundary matches what the user sees
+        ist_day = tx.date.astimezone(IST).day if tx.date.tzinfo else tx.date.day
+        b = _bucket(ist_day)
         if tx.type == 'income':
             b['income'] += float(tx.amount)
         elif tx.type == 'expense':
@@ -271,7 +280,10 @@ async def get_category_budgets(
     - over_budget: True if current_actual > avg_last_3_months
     - over_amount: amount by which the user is over their average (0 if under)
     """
-    curr_start, curr_end = get_month_date_range(datetime(year, month, 1))
+    # Use IST-aware boundaries so UTC-stored TIMESTAMPTZ values are filtered correctly
+    last_day = monthrange(year, month)[1]
+    curr_start = datetime(year, month, 1, tzinfo=IST)
+    curr_end = datetime(year, month, last_day, 23, 59, 59, tzinfo=IST)
 
     # Start of 3 months before the selected month
     hist_month = month - 3
@@ -279,7 +291,7 @@ async def get_category_budgets(
     if hist_month <= 0:
         hist_month += 12
         hist_year -= 1
-    hist_start = datetime(hist_year, hist_month, 1)
+    hist_start = datetime(hist_year, hist_month, 1, tzinfo=IST)
 
     # Current month expense transactions
     curr_stmt = select(Transaction).filter(
