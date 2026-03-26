@@ -13,7 +13,7 @@ from fastapi import HTTPException
 
 from app.models.transaction import Transaction
 from app.models.user import User
-from app.schemas.transaction_schemas import UpdateScope
+from app.schemas.transaction_schemas import UpdateScope, CreateTransactionRequest
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -303,5 +303,40 @@ class TransactionUpdateService:
             f"Bulk updated {updated_count} transactions for user {user_id} "
             f"with scope {scope.value}"
         )
-        
+
         return updated_count, original_tx
+
+
+async def create_manual_transaction(
+    session: AsyncSession,
+    user_id: str,
+    data: CreateTransactionRequest,
+) -> Transaction:
+    """
+    Create a manually entered transaction.
+
+    Args:
+        session: SQLAlchemy async session
+        user_id: Authenticated user UUID
+        data: Validated request body
+
+    Returns:
+        The newly created Transaction (with relationships loaded)
+    """
+    description = data.description
+    if data.note:
+        description = f"{description} — {data.note}"
+
+    tx = Transaction(
+        user_id=user_id,
+        amount=data.amount,
+        type=data.type,
+        description=description,
+        date=data.date,
+        category_id=data.category_id,
+        account_id=data.account_id,
+    )
+    session.add(tx)
+    await session.commit()
+    await session.refresh(tx, ['transactor', 'category', 'account'])
+    return tx

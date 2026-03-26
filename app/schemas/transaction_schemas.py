@@ -124,3 +124,21 @@ class TransactionListResponse(BaseModel):
     """Schema for transaction list response."""
     count: int = Field(..., description="Total count of transactions matching filters")
     items: list[TransactionResponse] = Field(..., description="List of transactions")
+
+
+class CreateTransactionRequest(BaseModel):
+    """Schema for manually creating a transaction."""
+    amount: float = Field(..., description="Transaction amount (positive value)")
+    type: str = Field(..., description="Transaction type: income, expense, or saving")
+    description: str = Field(..., max_length=500, description="Transaction description")
+    date: datetime = Field(..., description="Transaction date (ISO8601)")
+    category_id: Optional[str] = Field(None, description="Category UUID")
+    account_id: Optional[str] = Field(None, description="Account UUID")
+    note: Optional[str] = Field(None, max_length=500, description="Additional note")
+
+    @validator('type')
+    def validate_type(cls, v):
+        allowed = {'income', 'expense', 'saving'}
+        if v not in allowed:
+            raise ValueError(f"type must be one of: {', '.join(sorted(allowed))}")
+        return v

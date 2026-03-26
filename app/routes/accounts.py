@@ -32,6 +32,27 @@ def _serialize_account(account):
     }
 
 
+@router.get("/stats/summary")
+async def get_accounts_with_stats_route(
+    current_user: User = Depends(get_current_user),
+    date_from: Optional[datetime] = Query(default=None, description="Start date (ISO8601)"),
+    date_to: Optional[datetime] = Query(default=None, description="End date (ISO8601)"),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Get all accounts with income, expense, and savings statistics."""
+    account_stats, count = await get_user_accounts_with_stats(
+        session,
+        current_user.id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+    return {
+        "count": count,
+        "items": account_stats,
+    }
+
+
 @router.get("/{account_id}")
 async def get_account_by_id_route(
     account_id: str,
@@ -68,25 +89,4 @@ async def list_accounts_route(
     return {
         "count": count,
         "items": [_serialize_account(acc) for acc in accounts],
-    }
-
-
-@router.get("/stats/summary")
-async def get_accounts_with_stats_route(
-    current_user: User = Depends(get_current_user),
-    date_from: Optional[datetime] = Query(default=None, description="Start date (ISO8601)"),
-    date_to: Optional[datetime] = Query(default=None, description="End date (ISO8601)"),
-    session: AsyncSession = Depends(get_db_session),
-):
-    """Get all accounts with income, expense, and savings statistics."""
-    account_stats, count = await get_user_accounts_with_stats(
-        session,
-        current_user.id,
-        date_from=date_from,
-        date_to=date_to,
-    )
-
-    return {
-        "count": count,
-        "items": account_stats,
     }

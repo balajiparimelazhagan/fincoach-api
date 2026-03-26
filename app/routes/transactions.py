@@ -22,10 +22,12 @@ from app.schemas.transaction_schemas import (
     TransactionResponse,
     BulkUpdateResponse,
     TransactionListResponse,
+    CreateTransactionRequest,
 )
 from app.services.transaction_service import (
     TransactionQueryBuilder,
     TransactionUpdateService,
+    create_manual_transaction,
 )
 from app.utils.transaction_serializer import serialize_transaction
 from app.logging_config import get_logger
@@ -136,6 +138,22 @@ async def update_transaction(
     )
     
     return serialize_transaction(updated_transaction)
+
+
+@router.post("", response_model=TransactionResponse, status_code=201)
+async def create_transaction(
+    data: CreateTransactionRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """
+    Manually create a transaction.
+
+    Used by the AddTransaction page to record income, expenses, or savings
+    that were not imported from bank SMS / email.
+    """
+    transaction = await create_manual_transaction(session, current_user.id, data)
+    return serialize_transaction(transaction)
 
 
 @router.get("", response_model=TransactionListResponse)

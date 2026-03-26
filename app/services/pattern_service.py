@@ -9,6 +9,7 @@ from typing import List, Optional, Dict, Tuple
 from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, desc, func
+from sqlalchemy.orm import selectinload
 import uuid
 
 from app.logging_config import get_logger
@@ -529,15 +530,18 @@ class PatternService:
         """
         Get all patterns for a user with optional filtering.
         """
-        stmt = select(RecurringPattern).where(
+        stmt = select(RecurringPattern).options(
+            selectinload(RecurringPattern.transactor),
+            selectinload(RecurringPattern.streak),
+        ).where(
             RecurringPattern.user_id == user_id
         )
-        
+
         if status:
             stmt = stmt.where(RecurringPattern.status == status)
-        
+
         stmt = stmt.order_by(desc(RecurringPattern.confidence))
-        
+
         result = await self.db.execute(stmt)
         patterns = result.scalars().all()
         
@@ -592,19 +596,21 @@ class PatternService:
     ) -> List[Dict]:
         """Get all upcoming obligations for a user"""
         cutoff_date = datetime.utcnow() + timedelta(days=days_ahead)
-        
-        stmt = select(PatternObligation).join(
+
+        stmt = select(PatternObligation).options(
+            selectinload(PatternObligation.pattern).selectinload(RecurringPattern.transactor),
+        ).join(
             RecurringPattern
         ).where(
             RecurringPattern.user_id == user_id,
             PatternObligation.status == 'EXPECTED',
             PatternObligation.expected_date <= cutoff_date
         ).order_by(PatternObligation.expected_date)
-        
+
         result = await self.db.execute(stmt)
         obligations = result.scalars().all()
-        
-        result = []
+
+        rows = []
         for obl in obligations:
             obl_dict = obl.to_dict()
             obl_dict['pattern'] = obl.pattern.to_dict() if obl.pattern else None
@@ -612,9 +618,9 @@ class PatternService:
                 'id': str(obl.pattern.transactor.id),
                 'name': obl.pattern.transactor.name
             } if obl.pattern and obl.pattern.transactor else None
-            result.append(obl_dict)
-        
-        return result
+            rows.append(obl_dict)
+
+        return rows
     
     # ===== INCREMENTAL UPDATES =====
     
