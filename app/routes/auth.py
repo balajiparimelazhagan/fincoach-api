@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2 import id_token
 from urllib.parse import urlencode, quote
+from pydantic import BaseModel
+import jwt
 import uuid
 import json
 import secrets
@@ -17,7 +19,7 @@ from app.config import settings
 from app.dependencies import get_db
 from app.models.user import User
 from app.logging_config import get_logger
-from app.utils.jwt import create_access_token
+from app.utils.jwt import create_access_token, create_refresh_token, decode_refresh_token
 
 logger = get_logger(__name__)
 
@@ -233,9 +235,12 @@ async def google_callback(
             jwt_token = create_access_token(
                 data={"sub": str(existing_user.id), "email": existing_user.email}
             )
-            
+            jwt_refresh_token = create_refresh_token(
+                data={"sub": str(existing_user.id), "email": existing_user.email}
+            )
+
             logger.info(f"Existing user authenticated: {email}")
-            redirect_url = f"{settings.FRONTEND_BASE_URL}{settings.FRONTEND_LOGIN_REDIRECT_PATH}?{urlencode({'token': jwt_token})}"
+            redirect_url = f"{settings.FRONTEND_BASE_URL}{settings.FRONTEND_LOGIN_REDIRECT_PATH}?{urlencode({'token': jwt_token, 'refresh_token': jwt_refresh_token})}"
             return RedirectResponse(url=redirect_url)
 
         # Create new user
@@ -255,13 +260,16 @@ async def google_callback(
         await db.commit()
         await db.refresh(new_user)
 
-        # Create JWT token for new user
+        # Create JWT tokens for new user
         jwt_token = create_access_token(
+            data={"sub": str(new_user.id), "email": new_user.email}
+        )
+        jwt_refresh_token = create_refresh_token(
             data={"sub": str(new_user.id), "email": new_user.email}
         )
 
         logger.info(f"New user created: {email}")
-        
+
         # Trigger initial email sync with monthly batching (3 months)
         try:
             from app.celery.celery_tasks import fetch_user_emails_initial
@@ -269,8 +277,8 @@ async def google_callback(
             logger.info(f"Triggered initial email sync for new user: {email}")
         except Exception as sync_error:
             logger.error(f"Failed to trigger initial email sync: {sync_error}")
-        
-        redirect_url = f"{settings.FRONTEND_BASE_URL}{settings.FRONTEND_LOGIN_REDIRECT_PATH}?{urlencode({'token': jwt_token})}"
+
+        redirect_url = f"{settings.FRONTEND_BASE_URL}{settings.FRONTEND_LOGIN_REDIRECT_PATH}?{urlencode({'token': jwt_token, 'refresh_token': jwt_refresh_token})}"
         return RedirectResponse(url=redirect_url)
 
     except ValueError as e:
@@ -281,4 +289,42 @@ async def google_callback(
     except Exception as e:
         logger.error(f"Error during Google callback: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+@router.post("/refresh")
+async def refresh_token(
+    request: RefreshRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Exchange a valid refresh token for a new access token.
+
+    The refresh token is long-lived (default 7 days). The access token
+    returned here has the standard short expiry (default 30 minutes).
+    """
+    try:
+        payload = decode_refresh_token(request.refresh_token)
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+
+        new_access_token = create_access_token(
+            data={"sub": str(user.id), "email": user.email}
+        )
+        logger.info(f"Access token refreshed for user {user.email}")
+        return {"access_token": new_access_token, "token_type": "bearer"}
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Refresh token expired, please sign in again")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
 
