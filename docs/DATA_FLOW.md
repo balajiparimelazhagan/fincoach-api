@@ -268,9 +268,9 @@ The ORM objects get converted to plain dicts and sent back:
       "amount": 2450.0,
       "type": "expense",
       "date": "2026-01-07T00:00:00+05:30",
-      "transactor": { "id": "...", "name": "HDFC Bank", "label": null },
-      "category":   { "id": "...", "label": "Bank Transfer" },
-      "account":    { "id": "...", "account_last_four": "4521", "bank_name": "HDFC" }
+      "transactor": { "id": "...", "name": "HDFC Bank", "label": null, "picture": null, "source_id": "HDFC-4521" },
+      "category":   { "id": "...", "label": "Bank Transfer", "picture": null },
+      "account":    { "id": "...", "account_last_four": "4521", "bank_name": "HDFC", "type": "savings" }
     },
     ...
   ]
