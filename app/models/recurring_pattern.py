@@ -80,9 +80,13 @@ class RecurringPattern(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     
+    # Account this pattern is associated with (nullable — derived from transaction history)
+    account_id = Column(UUID(as_uuid=False), ForeignKey('accounts.id', ondelete='SET NULL'), nullable=True, index=True)
+
     # Relationships
     user = relationship("User", backref="recurring_patterns")
     transactor = relationship("Transactor", backref="recurring_patterns")
+    account = relationship("Account", backref="recurring_patterns")
     streak = relationship("RecurringPatternStreak", uselist=False, back_populates="pattern", cascade="all, delete-orphan")
     
     # Indexes for common queries

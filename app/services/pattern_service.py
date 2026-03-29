@@ -181,9 +181,16 @@ class PatternService:
         
         result = await self.db.execute(stmt)
         all_transactions = result.scalars().all()
-        
+
         logger.debug(f"[PATTERN_DISCOVERY] Found {len(all_transactions)} total transactions for this group")
-        
+
+        # Derive most common account_id for this group
+        account_id_counts: Dict[str, int] = {}
+        for t in all_transactions:
+            if t.account_id:
+                account_id_counts[str(t.account_id)] = account_id_counts.get(str(t.account_id), 0) + 1
+        most_common_account_id = max(account_id_counts, key=account_id_counts.get) if account_id_counts else None
+
         # Get already-linked transaction IDs to exclude them from discovery
         linked_result = await self.db.execute(
             select(PatternTransaction.transaction_id)
@@ -269,7 +276,8 @@ class PatternService:
                 direction=direction,
                 currency_id=currency_id,
                 candidate=candidate,
-                explanation=explanation
+                explanation=explanation,
+                account_id=most_common_account_id,
             )
             
             # Skip if pattern was not saved (duplicate amount cluster)
@@ -293,7 +301,8 @@ class PatternService:
         direction: str,
         currency_id: uuid.UUID,
         candidate: PatternCandidate,
-        explanation: Dict
+        explanation: Dict,
+        account_id: Optional[str] = None,
     ) -> Optional[RecurringPattern]:
         """
         Save discovered pattern to database.
@@ -376,6 +385,8 @@ class PatternService:
             existing.detected_at = datetime.utcnow()
             existing.last_evaluated_at = datetime.utcnow()
             existing.detection_version += 1
+            if account_id and not existing.account_id:
+                existing.account_id = account_id
             pattern = existing
         else:
             # Create new pattern
@@ -392,7 +403,8 @@ class PatternService:
                 confidence=Decimal(str(candidate.confidence)),
                 detected_at=datetime.utcnow(),
                 last_evaluated_at=datetime.utcnow(),
-                detection_version=1
+                detection_version=1,
+                account_id=account_id,
             )
             self.db.add(pattern)
         
@@ -629,6 +641,21 @@ class PatternService:
             for t in tx_result.scalars().all():
                 transactor_map[str(t.id)] = t
 
+        # Collect account IDs from patterns and fetch them in one query
+        from app.models.account import Account
+        account_ids = [
+            str(obl.pattern.account_id)
+            for obl in obligations
+            if obl.pattern and obl.pattern.account_id
+        ]
+        account_map: Dict[str, Account] = {}
+        if account_ids:
+            acc_result = await self.db.execute(
+                select(Account).where(Account.id.in_(account_ids))
+            )
+            for a in acc_result.scalars().all():
+                account_map[str(a.id)] = a
+
         rows = []
         for obl in obligations:
             obl_dict = obl.to_dict()
@@ -640,6 +667,13 @@ class PatternService:
                 'label': transactor.label,
                 'picture': transactor.picture,
             } if transactor else None
+            account = account_map.get(str(obl.pattern.account_id)) if obl.pattern and obl.pattern.account_id else None
+            obl_dict['account'] = {
+                'id': str(account.id),
+                'account_last_four': account.account_last_four,
+                'bank_name': account.bank_name,
+                'type': account.type.value if hasattr(account.type, 'value') else str(account.type),
+            } if account else None
             rows.append(obl_dict)
 
         return rows

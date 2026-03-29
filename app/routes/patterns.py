@@ -59,6 +59,7 @@ class ObligationResponse(BaseModel):
     days_early: Optional[float]
     pattern: Optional[dict] = None
     transactor: Optional[dict] = None
+    account: Optional[dict] = None
 
 
 class AnalyzeRequest(BaseModel):
