@@ -161,3 +161,21 @@ async def get_category_budgets_endpoint(
     """
     from app.services.stats_service import get_category_budgets
     return await get_category_budgets(session, str(current_user.id), year, month)
+
+
+@router.get("/cashflow/projected-summary")
+async def get_projected_summary_endpoint(
+    year: int = Query(..., ge=2000, le=2100, description="Year (e.g. 2026)"),
+    month: int = Query(..., ge=1, le=12, description="Month 1–12"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """
+    Sum of EXPECTED obligations remaining in the given month.
+
+    Returns projected_income and projected_expense based on recurring pattern
+    obligations that are still EXPECTED (i.e. not yet fulfilled or missed)
+    and fall between today and the end of the month.
+    """
+    from app.services.stats_service import get_projected_summary
+    return await get_projected_summary(session, str(current_user.id), year, month)

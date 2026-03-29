@@ -10,6 +10,7 @@ Create Date: 2026-03-28 00:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import UUID
 
 # revision identifiers, used by Alembic.
 revision = '032'
@@ -21,7 +22,7 @@ depends_on = None
 def upgrade() -> None:
     op.add_column(
         'recurring_patterns',
-        sa.Column('account_id', sa.String(), nullable=True)
+        sa.Column('account_id', UUID(as_uuid=True), nullable=True)
     )
     op.create_foreign_key(
         'fk_recurring_patterns_account_id',

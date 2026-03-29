@@ -378,3 +378,61 @@ async def get_category_budgets(
         })
 
     return sorted(result, key=lambda x: x['current_actual'], reverse=True)
+
+
+async def get_projected_summary(
+    session: AsyncSession,
+    user_id: str,
+    year: int,
+    month: int,
+) -> Dict[str, Any]:
+    """
+    Sum of EXPECTED obligations for the remaining days in the given month.
+
+    Only obligations with status='EXPECTED' and expected_date >= today are included,
+    so fulfilled/missed obligations are excluded from the projection.
+
+    Returns:
+        { projected_income: int, projected_expense: int }
+    """
+    last_day = monthrange(year, month)[1]
+    today = datetime.now(tz=IST)
+    month_end = datetime(year, month, last_day, 23, 59, 59, tzinfo=IST)
+
+    obl_stmt = (
+        select(PatternObligation, RecurringPattern.direction)
+        .join(RecurringPattern, PatternObligation.recurring_pattern_id == RecurringPattern.id)
+        .filter(
+            and_(
+                RecurringPattern.user_id == user_id,
+                PatternObligation.expected_date >= today,
+                PatternObligation.expected_date <= month_end,
+                PatternObligation.status == 'EXPECTED',
+            )
+        )
+    )
+    obl_result = await session.execute(obl_stmt)
+    rows = obl_result.all()
+
+    projected_income = 0.0
+    projected_expense = 0.0
+
+    for obl, direction in rows:
+        if obl.expected_min_amount and obl.expected_max_amount:
+            amount = (float(obl.expected_min_amount) + float(obl.expected_max_amount)) / 2
+        elif obl.expected_min_amount:
+            amount = float(obl.expected_min_amount)
+        elif obl.expected_max_amount:
+            amount = float(obl.expected_max_amount)
+        else:
+            amount = 0.0
+
+        if direction in ('income', 'CREDIT'):
+            projected_income += amount
+        elif direction in ('expense', 'DEBIT'):
+            projected_expense += amount
+
+    return {
+        "projected_income": round(projected_income),
+        "projected_expense": round(projected_expense),
+    }
