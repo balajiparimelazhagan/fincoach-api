@@ -45,7 +45,7 @@ CATEGORIES = {
     "Travel":               "2bcd61e5-f4e4-478d-9e85-9b4d73493545",
     "Personal Care":        "f5ca67b9-d0cb-4d94-8c27-3bcaf6ebf313",
     "Education":            "6d7be686-7e95-4c23-98ff-5ffcc9eda78d",
-    "Family & Relationships": "cca72189-04e4-44a7-8cb7-3d3309643c62",
+    "Family":                 "cca72189-04e4-44a7-8cb7-3d3309643c62",
     "Income":               "1f1cd1ad-0a98-46fe-bb92-2fded8ad35b5",
     "Savings":              "5a24168b-ad2e-4442-b17d-92ad45888138",
     "Loans & EMIs":         "dddf8adb-9e78-4be2-a81e-2c9d6c713d91",

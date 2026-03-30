@@ -57,118 +57,140 @@ RECURRING_PATTERN_CONFIGS: dict = {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "FIXED",    "confidence": 0.97,
         "base_day": 5,  "base_amount": 26200, "tolerance_days": 3,
+        "account": "hdfc_savings_4319",
     },
     "NETFLIX COM": {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "FIXED",    "confidence": 0.95,
         "base_day": 12, "base_amount": 840,   "tolerance_days": 3,
+        "account": "hdfc_credit_7420",
     },
     "Spotify": {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "FIXED",    "confidence": 0.98,
         "base_day": 1,  "base_amount": 119,   "tolerance_days": 3,
+        "account": "hdfc_savings_4319",
     },
     "Amazon Prime": {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "FIXED",    "confidence": 0.98,
         "base_day": 18, "base_amount": 299,   "tolerance_days": 3,
+        "account": "hdfc_credit_7420",
     },
     "Google Play": {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "FIXED",    "confidence": 0.94,
         "base_day": 28, "base_amount": 650,   "tolerance_days": 3,
+        "account": "hdfc_savings_4319",
     },
     "GOOGLEWORKSP": {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "FIXED",    "confidence": 0.97,
         "base_day": 4,  "base_amount": 2262,  "tolerance_days": 3,
+        "account": "hdfc_credit_7420",
     },
     # ── Expense: Utilities ───────────────────────────────────
     "BESCOM": {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "VARIABLE", "confidence": 0.90,
         "base_day": 7,  "base_amount": 1350,  "tolerance_days": 5,
+        "account": "hdfc_savings_4319",
     },
     "Indane Gas": {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "FIXED",    "confidence": 0.88,
         "base_day": 15, "base_amount": 1400,  "tolerance_days": 5,
+        "account": "hdfc_savings_4319",
     },
     # ── Expense: Family transfer ────────────────────────────
     "SARATHKUMAR SENTHILKUMAR": {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "VARIABLE", "confidence": 0.93,
         "base_day": 6,  "base_amount": 9000,  "tolerance_days": 4,
+        "account": "hdfc_savings_4319",
     },
     # ── Expense: Savings investments ────────────────────────
     "Zerodha Broking Limited": {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "VARIABLE", "confidence": 0.92,
         "base_day": 3,  "base_amount": 1000,  "tolerance_days": 3,
+        "account": "hdfc_savings_4319",
     },
     "AuraGold Digital SIP": {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "FIXED",    "confidence": 0.96,
         "base_day": 6,  "base_amount": 100,   "tolerance_days": 3,
+        "account": "hdfc_savings_4319",
     },
     # ── Expense: Healthcare ─────────────────────────────────
     "Apollo Pharmacy": {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "VARIABLE", "confidence": 0.85,
         "base_day": 10, "base_amount": 1000,  "tolerance_days": 7,
+        "account": "hdfc_savings_4319",
     },
     "Medplus": {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "VARIABLE", "confidence": 0.82,
         "base_day": 22, "base_amount": 800,   "tolerance_days": 7,
+        "account": "hdfc_savings_4319",
     },
     "1mg": {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "VARIABLE", "confidence": 0.80,
         "base_day": 25, "base_amount": 900,   "tolerance_days": 7,
+        "account": "hdfc_savings_4319",
     },
     "Cult.fit": {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "VARIABLE", "confidence": 0.93,
         "base_day": 1,  "base_amount": 1499,  "tolerance_days": 4,
+        "account": "hdfc_savings_4319",
     },
     # ── Expense: Credit card bills ──────────────────────────
     "HDFC Credit Card": {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "VARIABLE", "confidence": 0.96,
         "base_day": 15, "base_amount": 15000, "tolerance_days": 3,
+        "account": "hdfc_savings_4319",
     },
     "ICICI Credit Card": {
         "direction": "expense", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "VARIABLE", "confidence": 0.94,
         "base_day": 5,  "base_amount": 7000,  "tolerance_days": 3,
+        "account": "hdfc_savings_4319",
     },
     # ── Expense: Insurance (annual / quarterly — Portfolio page) ──
     "LIC India": {
         "direction": "expense", "pattern_type": "ANNUAL",    "interval_days": 365,
         "amount_behavior": "FIXED",    "confidence": 0.95,
         "base_day": 15, "base_amount": 46800, "tolerance_days": 7,
+        "account": "hdfc_savings_4319",
     },
     "Star Health Insurance": {
         "direction": "expense", "pattern_type": "ANNUAL",    "interval_days": 365,
         "amount_behavior": "FIXED",    "confidence": 0.94,
         "base_day": 20, "base_amount": 22500, "tolerance_days": 7,
+        "account": "hdfc_savings_4319",
     },
     "HDFC Life Insurance": {
         "direction": "expense", "pattern_type": "QUARTERLY", "interval_days": 90,
         "amount_behavior": "FIXED",    "confidence": 0.96,
         "base_day": 10, "base_amount": 9200,  "tolerance_days": 5,
+        "account": "hdfc_savings_4319",
     },
     # ── Income ──────────────────────────────────────────────
     "Mr Sabitha": {
         "direction": "income", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "FIXED",    "confidence": 0.98,
         "base_day": 28, "base_amount": 16500, "tolerance_days": 3,
+        "account": "hdfc_savings_4319",
     },
     "NIRAIMATHI SANKARASUBRAMANIYAN": {
         "direction": "income", "pattern_type": "MONTHLY", "interval_days": 30,
         "amount_behavior": "FIXED",    "confidence": 0.99,
         "base_day": 5,  "base_amount": 30000, "tolerance_days": 3,
+        "account": "hdfc_savings_4319",
     },
 }
 
@@ -342,22 +364,22 @@ class PatternSeeder:
 
         pid = str(uuid.uuid4())
         now = datetime.utcnow()
-        # Use column list instead of ON CONFLICT ON CONSTRAINT (unique index ≠ named constraint)
+        account_id = FIXED_ACCOUNTS.get(cfg.get("account")) if cfg.get("account") else None
         self.cur.execute(
             """
             INSERT INTO recurring_patterns
               (id, user_id, transactor_id, direction, pattern_type,
                interval_days, amount_behavior, status, confidence,
                detected_at, last_evaluated_at, detection_version,
-               created_at, updated_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,'ACTIVE',%s,%s,%s,1,%s,%s)
+               account_id, created_at, updated_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,'ACTIVE',%s,%s,%s,1,%s,%s,%s)
             ON CONFLICT (user_id, transactor_id, direction) DO NOTHING
             RETURNING id
             """,
             (pid, self.user_id, transactor_id,
              cfg["direction"], cfg["pattern_type"], cfg["interval_days"],
              cfg["amount_behavior"], cfg["confidence"],
-             now, now, now, now),
+             now, now, account_id, now, now),
         )
         row = self.cur.fetchone()
         return str(row[0]) if row else None
@@ -417,9 +439,14 @@ class PatternSeeder:
                 exp_day = exp_date.date()
 
                 if exp_day < today - timedelta(days=tol):
-                    # Past: mostly FULFILLED, 1-in-12 chance MISSED for realism
-                    if random.random() < 0.08:
+                    # Past: mostly FULFILLED, ~8% MISSED, ~5% SKIPPED for realism
+                    roll = random.random()
+                    if roll < 0.08:
                         status       = "MISSED"
+                        fulfilled_at = None
+                        days_early   = None
+                    elif roll < 0.13:
+                        status       = "SKIPPED"
                         fulfilled_at = None
                         days_early   = None
                     else:
