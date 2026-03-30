@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from pydantic import BaseModel, Field
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.logging_config import get_logger
 
@@ -21,6 +21,7 @@ from app.dependencies import get_current_user
 from app.models import User
 from app.models.recurring_pattern import RecurringPattern
 from app.models.recurring_pattern_streak import RecurringPatternStreak
+from app.models.pattern_obligation import PatternObligation
 from app.services.pattern_service import PatternService
 
 
@@ -73,6 +74,15 @@ class UpdatePatternRequest(BaseModel):
     status: Optional[str] = Field(None, description="ACTIVE, PAUSED, or BROKEN")
 
 
+class SnoozeObligationRequest(BaseModel):
+    days: int = Field(7, ge=1, le=90, description="Days to push the expected date forward")
+
+
+class SnoozeObligationRequest(BaseModel):
+    """Request to snooze an obligation"""
+    days: int = Field(7, ge=1, le=90, description="Days to push the expected date forward")
+
+
 # ===== ENDPOINTS =====
 
 @router.get("", response_model=List[PatternResponse])
@@ -123,6 +133,86 @@ async def get_upcoming_obligations(
     )
 
     return obligations
+
+
+@router.patch("/obligations/{obligation_id}/fulfill")
+async def fulfill_obligation(
+    obligation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Mark an obligation as manually fulfilled (e.g. paid outside tracked accounts)."""
+    result = await db.execute(
+        select(PatternObligation)
+        .join(RecurringPattern, RecurringPattern.id == PatternObligation.recurring_pattern_id)
+        .where(
+            PatternObligation.id == uuid.UUID(obligation_id),
+            RecurringPattern.user_id == current_user.id
+        )
+    )
+    obligation = result.scalar_one_or_none()
+
+    if not obligation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Obligation not found")
+
+    obligation.status = "FULFILLED"
+    obligation.fulfilled_at = datetime.utcnow()
+    await db.commit()
+
+    return {"status": "success", "obligation": obligation.to_dict()}
+
+
+@router.patch("/obligations/{obligation_id}/snooze")
+async def snooze_obligation(
+    obligation_id: str,
+    request: SnoozeObligationRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Push an obligation's expected date forward by N days (default 7)."""
+    result = await db.execute(
+        select(PatternObligation)
+        .join(RecurringPattern, RecurringPattern.id == PatternObligation.recurring_pattern_id)
+        .where(
+            PatternObligation.id == uuid.UUID(obligation_id),
+            RecurringPattern.user_id == current_user.id
+        )
+    )
+    obligation = result.scalar_one_or_none()
+
+    if not obligation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Obligation not found")
+
+    obligation.expected_date = obligation.expected_date + timedelta(days=request.days)
+    await db.commit()
+
+    return {"status": "success", "obligation": obligation.to_dict()}
+
+
+@router.patch("/obligations/{obligation_id}/skip")
+async def skip_obligation(
+    obligation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Skip this occurrence of an obligation. Not counted as paid or missed."""
+    result = await db.execute(
+        select(PatternObligation)
+        .join(RecurringPattern, RecurringPattern.id == PatternObligation.recurring_pattern_id)
+        .where(
+            PatternObligation.id == uuid.UUID(obligation_id),
+            RecurringPattern.user_id == current_user.id
+        )
+    )
+    obligation = result.scalar_one_or_none()
+
+    if not obligation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Obligation not found")
+
+    obligation.status = "SKIPPED"
+    await db.commit()
+
+    return {"status": "success", "obligation": obligation.to_dict()}
 
 
 @router.get("/{pattern_id}")

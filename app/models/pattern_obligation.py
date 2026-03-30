@@ -18,6 +18,7 @@ class ObligationStatus(str):
     FULFILLED = "FULFILLED"    # Matched by actual transaction
     MISSED = "MISSED"          # Past tolerance window, no match
     CANCELLED = "CANCELLED"    # Pattern paused/broken before fulfillment
+    SKIPPED = "SKIPPED"        # User explicitly skipped this occurrence
 
 
 class PatternObligation(Base):
@@ -80,7 +81,7 @@ class PatternObligation(Base):
     
     # Constraints and indexes
     __table_args__ = (
-        CheckConstraint("status IN ('EXPECTED', 'FULFILLED', 'MISSED', 'CANCELLED')", name='valid_obligation_status'),
+        CheckConstraint("status IN ('EXPECTED', 'FULFILLED', 'MISSED', 'CANCELLED', 'SKIPPED')", name='valid_obligation_status'),
         # Query upcoming obligations for a pattern
         Index('ix_pattern_obligations_pattern_expected', 'recurring_pattern_id', 'expected_date'),
         # Query upcoming obligations for a user (via pattern)
