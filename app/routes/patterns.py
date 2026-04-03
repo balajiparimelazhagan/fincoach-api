@@ -74,8 +74,9 @@ class UpdatePatternRequest(BaseModel):
     status: Optional[str] = Field(None, description="ACTIVE, PAUSED, or BROKEN")
 
 
-class SnoozeObligationRequest(BaseModel):
-    days: int = Field(7, ge=1, le=90, description="Days to push the expected date forward")
+class FulfillObligationRequest(BaseModel):
+    """Optional body for fulfilling an obligation — links it to an existing transaction"""
+    transaction_id: Optional[str] = Field(None, description="ID of the transaction that fulfills this obligation")
 
 
 class SnoozeObligationRequest(BaseModel):
@@ -138,10 +139,14 @@ async def get_upcoming_obligations(
 @router.patch("/obligations/{obligation_id}/fulfill")
 async def fulfill_obligation(
     obligation_id: str,
+    request: Optional[FulfillObligationRequest] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session)
 ):
-    """Mark an obligation as manually fulfilled (e.g. paid outside tracked accounts)."""
+    """Mark an obligation as manually fulfilled (e.g. paid outside tracked accounts).
+
+    Optionally accepts a transaction_id to link the fulfillment to a specific transaction.
+    """
     result = await db.execute(
         select(PatternObligation)
         .join(RecurringPattern, RecurringPattern.id == PatternObligation.recurring_pattern_id)
@@ -157,6 +162,8 @@ async def fulfill_obligation(
 
     obligation.status = "FULFILLED"
     obligation.fulfilled_at = datetime.utcnow()
+    if request and request.transaction_id:
+        obligation.fulfilled_by_transaction_id = uuid.UUID(request.transaction_id)
     await db.commit()
 
     return {"status": "success", "obligation": obligation.to_dict()}
