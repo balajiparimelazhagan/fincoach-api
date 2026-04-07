@@ -606,7 +606,8 @@ class PatternService:
     async def get_upcoming_obligations(
         self,
         user_id: uuid.UUID,
-        days_ahead: int = 30
+        days_ahead: int = 30,
+        include_fulfilled: bool = False,
     ) -> List[Dict]:
         """Get all upcoming obligations for a user"""
         cutoff_date = datetime.utcnow() + timedelta(days=days_ahead)
@@ -614,13 +615,14 @@ class PatternService:
         # Load obligations with patterns only (chained selectinload on transactor
         # is unreliable due to UUID type mismatch between Transactor.id and
         # RecurringPattern.transactor_id — fetch transactors separately instead)
+        allowed_statuses = ['EXPECTED', 'FULFILLED'] if include_fulfilled else ['EXPECTED']
         stmt = select(PatternObligation).options(
             selectinload(PatternObligation.pattern),
         ).join(
             RecurringPattern
         ).where(
             RecurringPattern.user_id == user_id,
-            PatternObligation.status == 'EXPECTED',
+            PatternObligation.status.in_(allowed_statuses),
             PatternObligation.expected_date <= cutoff_date
         ).order_by(PatternObligation.expected_date)
 
