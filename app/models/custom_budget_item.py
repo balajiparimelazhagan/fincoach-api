@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import Column, String, DateTime, ForeignKey, Numeric, Integer, Boolean
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db import Base
@@ -21,6 +21,8 @@ class CustomBudgetItem(Base):
     transactor_id = Column(UUID(as_uuid=False), ForeignKey('transactors.id', ondelete='SET NULL'), nullable=True)
     account_id = Column(UUID(as_uuid=False), ForeignKey('accounts.id', ondelete='SET NULL'), nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
+    # List of "YYYY-MM" strings, e.g. ["2026-04", "2026-05"]
+    paid_months = Column(JSONB, nullable=False, server_default='[]', default=list)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     # Relationships (read-only lookups for serialisation)
@@ -28,8 +30,8 @@ class CustomBudgetItem(Base):
     transactor = relationship("Transactor", backref="custom_budget_items", lazy="selectin")
     account = relationship("Account", backref="custom_budget_items", lazy="selectin")
 
-    def to_dict(self):
-        return {
+    def to_dict(self, month_key: str | None = None):
+        d = {
             "id": str(self.id),
             "label": self.label,
             "amount": float(self.amount),
@@ -41,4 +43,8 @@ class CustomBudgetItem(Base):
             "transactor_name": (self.transactor.label or self.transactor.name) if self.transactor else None,
             "account_id": str(self.account_id) if self.account_id else None,
             "account_label": f"{self.account.bank_name} ····{self.account.account_last_four}" if self.account else None,
+            "paid_months": self.paid_months or [],
         }
+        if month_key is not None:
+            d["is_paid"] = month_key in (self.paid_months or [])
+        return d
