@@ -35,7 +35,7 @@ celery_app.conf.update(
 celery_app.conf.beat_schedule = {
     'incremental-email-sync': {
         'task': 'app.celery.celery_tasks.schedule_incremental_sync',
-        'schedule': crontab(minute='*/2'),  # Every 2 minutes (example)
+        'schedule': crontab(hour='0', minute='0'),  # Once daily at midnight UTC
     },
     'scheduled-spending-analysis': {
         'task': 'app.celery.celery_tasks.schedule_spending_analysis',

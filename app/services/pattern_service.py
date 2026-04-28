@@ -4,7 +4,7 @@ Pattern Service
 Orchestrates pattern discovery and obligation tracking.
 Acts as the main interface for pattern-related operations.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Tuple
 from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -357,8 +357,8 @@ class PatternService:
             existing.amount_behavior = candidate.amount_behavior.value
             existing.confidence = Decimal(str(candidate.confidence))
             existing.status = 'ACTIVE'
-            existing.detected_at = datetime.utcnow()
-            existing.last_evaluated_at = datetime.utcnow()
+            existing.detected_at = datetime.now(timezone.utc)
+            existing.last_evaluated_at = datetime.now(timezone.utc)
             existing.detection_version += 1
             if account_id and not existing.account_id:
                 existing.account_id = account_id
@@ -376,8 +376,8 @@ class PatternService:
                 amount_behavior=candidate.amount_behavior.value,
                 status='ACTIVE',
                 confidence=Decimal(str(candidate.confidence)),
-                detected_at=datetime.utcnow(),
-                last_evaluated_at=datetime.utcnow(),
+                detected_at=datetime.now(timezone.utc),
+                last_evaluated_at=datetime.now(timezone.utc),
                 detection_version=1,
                 account_id=account_id,
             )
@@ -432,7 +432,7 @@ class PatternService:
                     id=uuid.uuid4(),
                     recurring_pattern_id=pattern.id,
                     transaction_id=uuid.UUID(txn.txn_id),
-                    linked_at=datetime.utcnow()
+                    linked_at=datetime.now(timezone.utc)
                 )
                 self.db.add(link)
         
@@ -585,7 +585,7 @@ class PatternService:
         include_fulfilled: bool = False,
     ) -> List[Dict]:
         """Get all upcoming obligations for a user"""
-        cutoff_date = datetime.utcnow() + timedelta(days=days_ahead)
+        cutoff_date = datetime.now(timezone.utc) + timedelta(days=days_ahead)
 
         # Load obligations with patterns only (chained selectinload on transactor
         # is unreliable due to UUID type mismatch between Transactor.id and
@@ -705,7 +705,7 @@ class PatternService:
             return {'matched': False, 'reason': 'No active patterns'}
         
         # Process against each pattern
-        current_date = datetime.utcnow()
+        current_date = datetime.now(timezone.utc)
         matches = []
         
         for pattern in patterns:
@@ -776,7 +776,7 @@ class PatternService:
         
         # Update pattern
         pattern.status = state.status
-        pattern.last_evaluated_at = datetime.utcnow()
+        pattern.last_evaluated_at = datetime.now(timezone.utc)
         
         # Mark obligation as fulfilled
         pending_obl_result = await self.db.execute(
@@ -807,7 +807,7 @@ class PatternService:
             id=uuid.uuid4(),
             recurring_pattern_id=pattern.id,
             transaction_id=transaction.id,
-            linked_at=datetime.utcnow()
+            linked_at=datetime.now(timezone.utc)
         )
         self.db.add(link)
     

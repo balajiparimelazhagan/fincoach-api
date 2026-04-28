@@ -128,11 +128,12 @@ class PatternObligationManager:
         """
         logger.debug(f"[OBLIGATION_MGR] Step 11: Computing next expected date, case={pattern_case.value}, interval={interval_days}d")
         if pattern_case == PatternCase.FLEXIBLE_MONTHLY:
-            # Next calendar month start
+            # Next calendar month start — preserve tzinfo from last_actual_date
+            tz = last_actual_date.tzinfo
             if last_actual_date.month == 12:
-                next_month_start = datetime(last_actual_date.year + 1, 1, 1)
+                next_month_start = datetime(last_actual_date.year + 1, 1, 1, tzinfo=tz)
             else:
-                next_month_start = datetime(last_actual_date.year, last_actual_date.month + 1, 1)
+                next_month_start = datetime(last_actual_date.year, last_actual_date.month + 1, 1, tzinfo=tz)
             return next_month_start
         
         elif pattern_case in [PatternCase.FIXED_MONTHLY, PatternCase.VARIABLE_MONTHLY,

@@ -45,7 +45,7 @@ async def fetch_user_emails_async(user_id: str, is_initial: bool = False, months
             user_id=user_id,
             status=JobStatus.PROCESSING,
             is_initial=is_initial,
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(timezone.utc),
         )
         session.add(job)
         try:
@@ -86,7 +86,7 @@ async def fetch_user_emails_async(user_id: str, is_initial: bool = False, months
             if not all_emails:
                 logger.info(f"No new emails for user {user_id}")
                 job.status = JobStatus.COMPLETED
-                job.completed_at = datetime.utcnow()
+                job.completed_at = datetime.now(timezone.utc)
                 await session.commit()
                 return {"status": "success", "message": "No new emails"}
 
@@ -99,6 +99,7 @@ async def fetch_user_emails_async(user_id: str, is_initial: bool = False, months
                 logger.info(f"Progress: {job.processed_emails}/{job.total_emails} for user {user_id}")
 
             # Update last_email_fetch_time to the latest email seen
+            await session.refresh(user)
             email_dates = [e[3] for e in all_emails if len(e) >= 4 and isinstance(e[3], datetime)]
             if email_dates:
                 latest = max(email_dates)
@@ -106,7 +107,7 @@ async def fetch_user_emails_async(user_id: str, is_initial: bool = False, months
                     user.last_email_fetch_time = latest
 
             job.status = JobStatus.COMPLETED
-            job.completed_at = datetime.utcnow()
+            job.completed_at = datetime.now(timezone.utc)
             await session.commit()
 
             logger.info(f"Completed sync for user {user_id}: {job.parsed_transactions} transactions from {job.total_emails} emails")
@@ -122,11 +123,11 @@ async def fetch_user_emails_async(user_id: str, is_initial: bool = False, months
             logger.error(f"Error processing emails for user {user_id}: {e}", exc_info=True)
             await session.refresh(job)
             job.status = JobStatus.FAILED
-            job.completed_at = datetime.utcnow()
+            job.completed_at = datetime.now(timezone.utc)
             if job.error_log is None:
                 job.error_log = []
             job.error_log.append({
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "error": str(e),
                 "error_type": type(e).__name__,
             })
@@ -246,6 +247,9 @@ async def process_email_batch(session, emails: List, coordinator: EmailProcessin
                 "error_type": type(e).__name__,
             })
             logger.error(f"Error processing email {message_id}: {e}", exc_info=True)
+
+    # Rollbacks during the loop expire all session objects; refresh before reading.
+    await session.refresh(job)
 
     # Apply batch stats to job once (caller commits)
     job.parsed_transactions += batch_parsed
