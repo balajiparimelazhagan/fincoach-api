@@ -9,10 +9,12 @@ from pydantic import BaseModel
 import jwt
 import uuid
 import json
+import pickle
 import secrets
 import hashlib
 import base64
 import httpx
+from google.oauth2.credentials import Credentials as GoogleCredentials
 from datetime import datetime, timedelta
 
 from app.config import settings
@@ -32,6 +34,22 @@ SCOPES = [
     'https://www.googleapis.com/auth/userinfo.email',
     'https://www.googleapis.com/auth/gmail.readonly'
 ]
+
+
+def build_google_credentials_pickle(token_data: dict) -> bytes:
+    expiry = None
+    if "expires_in" in token_data:
+        expiry = datetime.utcnow() + timedelta(seconds=token_data["expires_in"])
+    creds = GoogleCredentials(
+        token=token_data.get("access_token"),
+        refresh_token=token_data.get("refresh_token"),
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=settings.GOOGLE_CLIENT_ID,
+        client_secret=settings.GOOGLE_CLIENT_SECRET,
+        scopes=SCOPES,
+        expiry=expiry,
+    )
+    return pickle.dumps(creds)
 
 
 def create_pkce():
@@ -229,6 +247,7 @@ async def google_callback(
             existing_user.name = name
             existing_user.picture = picture
             existing_user.google_credentials_json = json.dumps(token_data)
+            existing_user.google_token_pickle = build_google_credentials_pickle(token_data)
             
             await db.commit()
             await db.refresh(existing_user)
@@ -253,7 +272,8 @@ async def google_callback(
             access_token=access_token,
             refresh_token=refresh_token,
             token_expiry=token_expiry,
-            google_credentials_json=json.dumps(token_data)
+            google_credentials_json=json.dumps(token_data),
+            google_token_pickle=build_google_credentials_pickle(token_data),
         )
         
         db.add(new_user)

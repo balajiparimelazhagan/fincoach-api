@@ -4,6 +4,7 @@ from typing import List, Tuple, Optional
 from datetime import datetime, timedelta, timezone
 import json
 from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from app.logging_config import get_logger
@@ -78,20 +79,30 @@ class GmailService:
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
+            elif self.credentials_data:
+                try:
+                    from app.config import settings
+                    token_info = json.loads(self.credentials_data)
+                    expiry = None
+                    if "expires_in" in token_info:
+                        from datetime import timedelta as _td
+                        expiry = datetime.utcnow() + _td(seconds=token_info["expires_in"])
+                    creds = Credentials(
+                        token=token_info.get("access_token"),
+                        refresh_token=token_info.get("refresh_token"),
+                        token_uri="https://oauth2.googleapis.com/token",
+                        client_id=settings.GOOGLE_CLIENT_ID,
+                        client_secret=settings.GOOGLE_CLIENT_SECRET,
+                        expiry=expiry,
+                    )
+                except Exception as e:
+                    logger.error(f"Error creating credentials from credentials_data: {e}")
+                    raise
             else:
-                if self.credentials_data:
-                    try:
-                        client_config = json.loads(self.credentials_data)
-                        flow = InstalledAppFlow.from_client_config(client_config, self.SCOPES)
-                        creds = flow.run_local_server(port=0)
-                    except Exception as e:
-                        logger.error(f"Error during authentication from credentials_data: {e}")
-                        raise
-                elif not os.path.exists(self.credentials_file):                   
+                if not os.path.exists(self.credentials_file):
                     raise FileNotFoundError(
                         f"Credentials file '{self.credentials_file}' not found."
                     )
-                
                 try:
                     flow = InstalledAppFlow.from_client_secrets_file(
                         self.credentials_file, self.SCOPES
@@ -100,7 +111,7 @@ class GmailService:
                 except Exception as e:
                     logger.error("Make sure credentials.json is valid and downloaded from Google Cloud Console.")
                     raise
-            
+
             if creds and not self.token_data:
                 with open(self.token_file, 'wb') as token:
                     pickle.dump(creds, token)

@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from typing import Optional
 import logging
 
-from google.adk.agents.llm_agent import Agent
-
 logger = logging.getLogger(__name__)
 
 
@@ -46,51 +44,7 @@ class PatternDetectionAgent:
     """
     
     def __init__(self):
-        """Initialize the pattern detection agent"""
-        self.agent = Agent(
-            model="gemini-2.5-flash",
-            name="pattern_detection_agent",
-            description="Detects recurring transaction patterns from period buckets",
-            instruction=self._get_system_instruction(),
-        )
         logger.info("Pattern Detection Agent initialized")
-    
-    def _get_system_instruction(self) -> str:
-        """Get system instruction for pattern detection"""
-        return """You are an expert at detecting recurring transaction patterns.
-
-Your task is to analyze transaction bucket data and determine:
-1. Is there a recurring pattern?
-2. What type of pattern is it? (monthly, bi-monthly, quarterly, custom interval)
-3. What is the frequency?
-4. How many occurrences of the pattern were found?
-
-Pattern Types:
-- MONTHLY: Transaction appears in consecutive months (at least 3 times)
-- BI-MONTHLY: Transaction appears every 2 months (at least 3 occurrences)
-- QUARTERLY: Transaction appears every 3 months (at least 3 occurrences)
-- CUSTOM_INTERVAL: Fixed interval in days (e.g., 28-day recharge)
-- IRREGULAR: No clear pattern detected
-
-Key Rules:
-1. MINIMUM 3 OCCURRENCES required to declare a pattern recurring
-2. Examine gaps between periods:
-   - No gaps = perfect monthly
-   - 1-month gaps = monthly with some skips
-   - 2-month gaps = bi-monthly
-   - 3-month gaps = quarterly
-   - Regular custom gaps = custom interval
-
-3. For custom intervals, look at actual days between transactions:
-   - If ~28 days apart consistently = 28-day pattern
-   - If ~30 days apart consistently = monthly (30-day cycle)
-   - etc.
-
-4. A pattern is "recurring" only if:
-   - At least 3 occurrences exist
-   - The interval is consistent (±2 months tolerance for calendar variations)
-
-Respond with clear reasoning about whether a pattern exists and what type it is."""
 
     def detect_pattern(
         self,

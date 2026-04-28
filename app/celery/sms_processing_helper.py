@@ -8,7 +8,7 @@ from typing import List
 from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
 
-from app.db import AsyncSessionLocal
+from app.celery.celery_db import CeleryAsyncSessionLocal as AsyncSessionLocal
 from app.services.transaction_handler import handle_new_transaction
 from app.models.user import User
 from app.models.sms_transaction_sync_job import SmsTransactionSyncJob, JobStatus as SmsJobStatus

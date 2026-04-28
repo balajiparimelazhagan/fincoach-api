@@ -1,7 +1,7 @@
 """
 Pattern Service
 
-Orchestrates pattern discovery, obligation tracking, and LLM explanations.
+Orchestrates pattern discovery and obligation tracking.
 Acts as the main interface for pattern-related operations.
 """
 from datetime import datetime, timedelta
@@ -34,7 +34,6 @@ from agent.pattern_obligation_manager import (
     PatternState,
     TransactionProcessor
 )
-from agent.pattern_explanation_agent import PatternExplanationAgent
 
 
 class PatternService:
@@ -50,7 +49,6 @@ class PatternService:
     
     def __init__(self, db: AsyncSession):
         self.db = db
-        self.explanation_agent = PatternExplanationAgent()
     
     @staticmethod
     def _get_currency_symbol(currency_code: str) -> str:
@@ -247,28 +245,8 @@ class PatternService:
                         f"case={candidate.pattern_case.value}, interval={candidate.interval_days}d, "
                         f"confidence={candidate.confidence:.2f}")
             
-            # Get LLM explanation
-            logger.debug(f"[PATTERN_DISCOVERY] Requesting LLM explanation for candidate {idx}")
-            explanation = self.explanation_agent.explain_pattern(
-                transactor_name=transactor.name if transactor else "Unknown",
-                pattern_case=candidate.pattern_case,
-                interval_days=candidate.interval_days,
-                amount_behavior=candidate.amount_behavior,
-                avg_amount=candidate.cluster.avg_amount,
-                min_amount=candidate.cluster.min_amount,
-                max_amount=candidate.cluster.max_amount,
-                confidence=candidate.confidence,
-                observation_count=len(candidate.transactions),
-                currency_symbol=self._get_currency_symbol(currency.value if currency else "INR")
-            )
-            
-            # Skip if LLM marks as invalid
-            if not explanation.get('is_valid', True):
-                logger.warning(f"[PATTERN_DISCOVERY] LLM marked candidate {idx} as invalid, skipping")
-                continue
-            
-            logger.info(f"[PATTERN_DISCOVERY] LLM validated candidate {idx}, saving to database")
-            
+            logger.info(f"[PATTERN_DISCOVERY] Saving candidate {idx} to database")
+
             # Save to database
             pattern = await self._save_pattern(
                 user_id=user_id,
@@ -276,7 +254,6 @@ class PatternService:
                 direction=direction,
                 currency_id=currency_id,
                 candidate=candidate,
-                explanation=explanation,
                 account_id=most_common_account_id,
             )
             
@@ -287,8 +264,7 @@ class PatternService:
             
             discovered.append({
                 'pattern': pattern,
-                'transactor': transactor,  # Include transactor object to avoid lazy loading
-                'explanation': explanation,
+                'transactor': transactor,
                 'transactions': candidate.transactions
             })
         
@@ -301,7 +277,6 @@ class PatternService:
         direction: str,
         currency_id: uuid.UUID,
         candidate: PatternCandidate,
-        explanation: Dict,
         account_id: Optional[str] = None,
     ) -> Optional[RecurringPattern]:
         """
@@ -719,7 +694,7 @@ class PatternService:
                 RecurringPattern.transactor_id == transaction.transactor_id,
                 RecurringPattern.direction == transaction.type,
                 RecurringPattern.status.in_(['ACTIVE', 'PAUSED'])
-            )
+            ).options(selectinload(RecurringPattern.streak))
         )
         patterns = patterns_result.scalars().all()
         

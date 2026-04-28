@@ -1,6 +1,5 @@
 """
 Amount Analysis Agent for analyzing transaction amounts and detecting outliers.
-Uses Google ADK to intelligently reason about outliers before excluding them.
 Part of the Spending Analysis agentic system.
 """
 
@@ -8,10 +7,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Dict
 from decimal import Decimal
 import statistics
-import json
 import logging
-
-from google.adk.agents.llm_agent import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -50,58 +46,13 @@ class AmountAnalysisResult:
 class AmountAnalysisAgent:
     """
     Agent for analyzing transaction amounts and detecting outliers.
-    
-    Responsibilities:
-    1. Calculate amount statistics
-    2. Use LLM to intelligently detect outliers
-    3. Exclude outliers with reasoning
-    4. Calculate variance metrics
-    5. Classify amount pattern (fixed, variable, highly variable)
+
+    Uses IQR statistical method for deterministic outlier detection,
+    then classifies amounts as fixed, variable, or highly variable.
     """
     
     def __init__(self):
-        """Initialize the amount analysis agent"""
-        self.agent = Agent(
-            model="gemini-2.5-flash",
-            name="amount_analysis_agent",
-            description="Analyzes transaction amounts and intelligently detects outliers",
-            instruction=self._get_system_instruction(),
-        )
         logger.info("Amount Analysis Agent initialized")
-    
-    def _get_system_instruction(self) -> str:
-        """Get system instruction for amount analysis"""
-        return """You are an expert at analyzing transaction amounts and detecting outliers.
-
-Your task is to:
-1. Analyze a list of transaction amounts
-2. Identify outliers (amounts that seem unusual or one-time)
-3. Provide reasoning for why an amount is an outlier
-4. Calculate statistics on the remaining amounts
-
-Outlier Detection Rules:
-- Use statistical methods (IQR, Z-score) as baseline
-- But also use DOMAIN KNOWLEDGE and CONTEXT:
-  
-Examples of outliers to EXCLUDE:
-- A tenant payment of ₹16,170 when others are ₹1,660 (probably one-time advance or adjustment)
-- A grocery purchase of ₹5,000 when others are ₹400-₹600 (probably bulk/festival purchase)
-- An electricity bill of ₹3,500 when others are ₹800-₹1,200 (might be meter replacement)
-  
-Examples of amounts to KEEP (variable but normal):
-- Electricity bills ranging ₹800-₹1,200 (seasonal variation is normal)
-- Grocery purchases varying by amount (normal shopping variation)
-- Phone recharges all ₹199 but one is ₹349 (new plan, not outlier)
-
-Your Response Format:
-Return ONLY a valid JSON object with:
-{
-    "outliers": [{"amount": 16170, "reason": "One-time tenant advance, >10x normal amount"}],
-    "reasoning": "Detected 1 outlier from 5 transactions. Remaining 4 show consistent ₹1,600-₹1,800 pattern.",
-    "should_exclude": true
-}
-
-Be conservative: If unsure, KEEP the amount (don't exclude unless clearly anomalous)."""
 
     def analyze_amounts(
         self,
@@ -137,9 +88,9 @@ Be conservative: If unsure, KEEP the amount (don't exclude unless clearly anomal
             )
         
         logger.info(f"Analyzing {len(amounts)} amounts for {transactor_name}")
-        
-        # Use LLM to detect outliers
-        outliers_result = self._detect_outliers_with_llm(amounts, transactor_name)
+
+        # Use IQR statistical method for deterministic outlier detection
+        outliers_result = self._detect_outliers_statistical(amounts)
         outliers = outliers_result.get("outliers", [])
         outlier_reasons = {str(o["amount"]): o["reason"] for o in outliers}
         
@@ -191,54 +142,6 @@ Be conservative: If unsure, KEEP the amount (don't exclude unless clearly anomal
         )
         
         return result
-    
-    def _detect_outliers_with_llm(self, amounts: List[Decimal], transactor_name: str) -> dict:
-        """Use LLM to detect outliers with reasoning"""
-        try:
-            from google.genai import Client
-            client = Client()
-            
-            # Prepare context
-            amounts_str = ", ".join([f"₹{a}" for a in amounts])
-            context = f"""Transaction Amounts to Analyze:
-{amounts_str}
-
-Transactor: {transactor_name}
-Count: {len(amounts)} transactions
-Min: ₹{min(amounts)}
-Max: ₹{max(amounts)}
-Mean: ₹{sum(amounts)/len(amounts):.2f}
-"""
-            
-            prompt = f"""{self._get_system_instruction()}
-
-{context}
-
-Analyze the amounts above and identify outliers."""
-            
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt,
-            )
-            
-            response_text = response.text.strip()
-            
-            # Try to parse JSON
-            if response_text.startswith("```json"):
-                response_text = response_text[7:]
-            if response_text.startswith("```"):
-                response_text = response_text[3:]
-            if response_text.endswith("```"):
-                response_text = response_text[:-3]
-            
-            result = json.loads(response_text.strip())
-            logger.info(f"LLM detected {len(result.get('outliers', []))} outliers")
-            
-            return result
-            
-        except Exception as e:
-            logger.warning(f"LLM outlier detection failed: {e}, using statistical fallback")
-            return self._detect_outliers_statistical(amounts)
     
     def _detect_outliers_statistical(self, amounts: List[Decimal]) -> dict:
         """Statistical fallback for outlier detection using IQR method"""

@@ -126,12 +126,12 @@ class TransactionExtractorAgent:
 
     def _get_system_message(self, category_guidelines: Optional[str] = None) -> str:
         """Create the reusable parsing instruction.
-        
+
         Args:
             category_guidelines: Optional pre-formatted category guidelines from database
         """
         categories_str = self._categories_cache
-        
+
         # Use provided guidelines or fall back to default
         if not category_guidelines:
             category_guidelines = """- Housing: rent, mortgage, property tax, maintenance
@@ -154,42 +154,53 @@ class TransactionExtractorAgent:
                - Taxes: income tax, GST
                - Donations: charity, religious donations
                - Miscellaneous: anything that doesn't fit above"""
-        
-        return f"""You are an expert transaction extractor for financial data. 
-            Your task is to extract transaction information from email content.
 
-            For each email, extract:
-            1. Amount (numerical value)
-            2. Transaction Type: CRITICAL - Determine the correct type:
-               - 'refund' if this is a REVERSAL, REFUND, or CANCELLED transaction (money returned)
-               - 'income' if money is being RECEIVED (credit, deposit, transfer in)
-               - 'expense' if money is being SPENT (debit, payment, transfer out)
-               Keywords for refund: reversal, reversed, refund, refunded, cancelled, cancellation, credited back
-            3. Date and Time (in YYYY-MM-DD HH:MM:SS format, use current date and time if not found)
-            4. Category - CRITICAL: You MUST choose EXACTLY ONE category from this list:
-               {categories_str}
-               
-               Category Guidelines:
-               {category_guidelines}
-               
-            5. Description (brief description of the transaction)
-            6. Transactor (who sent the money or who received it, name of transactor or bank or UPI ID)
-            7. Transactor Source ID (transactor's UPI ID or bank ID or null if not available)
+        return f"""You are an expert transaction extractor for financial data.
 
-            Always return the response as a valid JSON object with these exact fields:
-            {{
-                "amount": <number>,
-                "transaction_type": "<income|expense|refund>",
-                "date": "<YYYY-MM-DD HH:MM:SS>",
-                "category": "<category>",
-                "description": "<description>",
-                "transactor": "<transactor>",
-                "transactor_source_id": "<transactor_source_id>"
-            }}
+STEP 1 — INTENT CHECK:
+First decide if this email describes a COMPLETED financial transaction.
+Return ONLY {{"is_transaction": false}} if the email is any of these:
+- Promotional or marketing content (offers, cashback deals, discounts, vouchers)
+- A payment reminder or upcoming due date notification
+- An account statement or balance summary
+- An informational update with no completed transaction
+- OTP or verification messages
 
-            IMPORTANT: The category field MUST be one of the exact category names from the list above.
-            If any information is missing, make a reasonable inference based on the email content.
-            Be precise with amounts and dates. For ambiguous cases, indicate confidence level."""
+STEP 2 — EXTRACTION:
+Only if this IS a completed transaction, extract the details and return:
+
+{{
+    "is_transaction": true,
+    "amount": <number>,
+    "transaction_type": "<income|expense|refund>",
+    "date": "<YYYY-MM-DD HH:MM:SS>",
+    "category": "<category>",
+    "description": "<description>",
+    "transactor": "<transactor>",
+    "transactor_source_id": "<transactor_source_id>"
+}}
+
+Transaction type rules:
+- 'refund' if this is a REVERSAL, REFUND, or CANCELLED transaction (money returned)
+- 'income' if money is being RECEIVED (credit, deposit, transfer in)
+- 'expense' if money is being SPENT (debit, payment, transfer out)
+Keywords for refund: reversal, reversed, refund, refunded, cancelled, cancellation, credited back
+
+Date: extract the transaction date from the email body. Indian bank emails use formats like
+"on 20-04-26" (DD-MM-YY), "20-04-2026" (DD-MM-YYYY), or "20/04/2026". Two-digit years mean 2000s
+(26 → 2026). Return YYYY-MM-DD HH:MM:SS. If no time is given use 00:00:00. If no date found return null.
+
+Category — choose EXACTLY ONE from this list:
+{categories_str}
+
+Category Guidelines:
+{category_guidelines}
+
+Transactor: who sent the money or who received it (name, bank, or UPI ID).
+Transactor Source ID: UPI ID or bank reference ID, or null if not available.
+
+IMPORTANT: The category field MUST be one of the exact category names from the list above.
+If any information is missing, make a reasonable inference based on the email content."""
 
     async def refresh_categories_from_db(self, db) -> None:
         """Refresh categories and guidelines from database.
@@ -222,6 +233,10 @@ class TransactionExtractorAgent:
             # First try the LLM model if available
             response = self._query_model(email_content)
             transaction_data = self._extract_json_from_response(response)
+
+            # Check if LLM explicitly identified this as a non-transaction email
+            if transaction_data and not transaction_data.get("is_transaction", True):
+                return None
 
             # If LLM didn't return structured JSON, fall back to regex parsing
             if not transaction_data:
@@ -271,18 +286,7 @@ class TransactionExtractorAgent:
         date_str = None
         date_match = DATE_PATTERN.search(text)
         if date_match:
-            raw = date_match.group(1)
-            # normalize to YYYY-MM-DD HH:MM:SS
-            for fmt in DATE_FORMATS:
-                try:
-                    dt = datetime.strptime(raw, fmt)
-                    # two-digit years: assume 2000s
-                    if dt.year < 100:
-                        dt = dt.replace(year=dt.year + 2000)
-                    date_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-                    break
-                except Exception:
-                    continue
+            date_str = self._normalize_date(date_match.group(1))
 
         # Transaction type: Check for refund first, then debit/credit
         trans_type = None
@@ -346,7 +350,9 @@ class TransactionExtractorAgent:
         if amount is not None:
             result["amount"] = amount
             result["transaction_type"] = trans_type or "expense"
-            result["date"] = date_str or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if not date_str:
+                return None  # reject: no reliable date found
+            result["date"] = date_str
             result["category"] = category or "Miscellaneous"
             result["description"] = description
             result["transactor"] = source or ""
@@ -406,6 +412,35 @@ class TransactionExtractorAgent:
 
         return None
 
+    _PARSE_FORMATS: Tuple[str, ...] = (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d",
+        "%d-%m-%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M:%S",
+        "%d-%m-%Y %H:%M",
+        "%d/%m/%Y %H:%M",
+        "%d-%m-%Y",
+        "%d/%m/%Y",
+        "%d-%m-%y %H:%M:%S",
+        "%d/%m/%y %H:%M:%S",
+        "%d-%m-%y",
+        "%d/%m/%y",
+    )
+
+    def _normalize_date(self, date_str: str) -> Optional[str]:
+        """Parse any recognisable date string and return YYYY-MM-DD HH:MM:SS, or None."""
+        if not date_str or str(date_str).lower() in ("null", "none", ""):
+            return None
+        for fmt in self._PARSE_FORMATS:
+            try:
+                dt = datetime.strptime(str(date_str).strip(), fmt)
+                if dt.year < 100:
+                    dt = dt.replace(year=dt.year + 2000)
+                return dt.strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                continue
+        return None
+
     def _create_transaction(self, data: dict, message_id: str) -> Optional[Transaction]:
         """
         Create a Transaction object from parsed data.
@@ -442,11 +477,17 @@ class TransactionExtractorAgent:
             else:
                 transaction_type = TransactionType.EXPENDITURE
 
+            # Normalize date — reject transaction if date cannot be parsed
+            normalized_date = self._normalize_date(data.get("date"))
+            if not normalized_date:
+                print(f"Skipping transaction: unparseable date {data.get('date')!r}")
+                return None
+
             # Create transaction
             transaction = Transaction(
                 amount=float(data.get("amount", 0)),
                 transaction_type=transaction_type,
-                date=data.get("date", ""),
+                date=normalized_date,
                 category=validated_category,  # Use validated category
                 description=data.get("description"),
                 transactor=data.get("transactor") or data.get("source"),

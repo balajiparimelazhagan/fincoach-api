@@ -3,6 +3,7 @@ Celery application configuration for distributed task processing.
 """
 from celery import Celery
 from celery.schedules import crontab
+from datetime import timedelta
 
 from app.config import settings
 
@@ -38,7 +39,7 @@ celery_app.conf.beat_schedule = {
     },
     'scheduled-spending-analysis': {
         'task': 'app.celery.celery_tasks.schedule_spending_analysis',
-        'schedule': crontab(minute='*/60'),  # Every 30 minutes
+        'schedule': timedelta(minutes=60),
     },
     'cleanup-stale-email-jobs': {
         'task': 'app.celery.celery_tasks.cleanup_stale_email_sync_jobs',
@@ -49,7 +50,6 @@ celery_app.conf.beat_schedule = {
 # Task routes (optional - for routing specific tasks to specific queues)
 celery_app.conf.task_routes = {
     'app.celery.celery_tasks.fetch_user_emails_initial': {'queue': 'email_processing'},
-    'app.celery.celery_tasks.process_monthly_email_job': {'queue': 'email_processing'},
     'app.celery.celery_tasks.fetch_user_emails_incremental': {'queue': 'email_processing'},
     'app.celery.celery_tasks.schedule_incremental_sync': {'queue': 'scheduling'},
     'app.celery.celery_tasks.analyze_spending_patterns': {'queue': 'spending_analysis'},

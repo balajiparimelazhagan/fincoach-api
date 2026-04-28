@@ -166,26 +166,30 @@ Guidelines:
             AccountInfo object with extracted bank name and account last 4 digits
         """
         try:
-            # First try the LLM model if available
+            # Try regex first — handles all standard Indian bank notification formats
+            result = self._extract_with_regex(message_text, sender_email, sender_sms)
+
+            if result.bank_name or result.account_last_four:
+                return result
+
+            # Regex found nothing: fall back to LLM only as last resort
             if self.agent:
+                logger.info("Regex found no account info, trying LLM fallback")
                 response = self._query_model(message_text, sender_email, sender_sms)
                 account_data = self._extract_json_from_response(response)
-                
+
                 if account_data and (account_data.get("bank_name") or account_data.get("account_last_four")):
                     return AccountInfo(
                         bank_name=account_data.get("bank_name"),
                         account_last_four=account_data.get("account_last_four"),
                         account_type=account_data.get("account_type", "savings"),
-                        confidence=0.95  # High confidence for LLM extraction
+                        confidence=0.95,
                     )
-            
-            # Fall back to regex parsing
-            logger.info("Using regex fallback for account extraction")
-            return self._extract_with_regex(message_text, sender_email, sender_sms)
-            
+
+            return result
+
         except Exception as e:
             logger.error(f"Error extracting account info: {e}", exc_info=True)
-            # Return empty account info on error
             return AccountInfo(confidence=0.0)
 
     def _query_model(

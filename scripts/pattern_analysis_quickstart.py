@@ -13,7 +13,6 @@ from agent.pattern_discovery_engine import (
     AmountBehaviorType
 )
 from agent.pattern_obligation_manager import PatternObligationManager
-from agent.pattern_explanation_agent import PatternExplanationAgent
 
 
 # ==============================================================================
@@ -57,43 +56,7 @@ def example_discover_patterns():
 
 
 # ==============================================================================
-# EXAMPLE 2: Generate LLM explanation
-# ==============================================================================
-
-def example_explain_pattern(candidate):
-    """
-    Example: Get LLM-generated explanation for a pattern.
-    """
-    print("\n" + "=" * 80)
-    print("EXAMPLE 2: Pattern Explanation (LLM)")
-    print("=" * 80)
-    
-    agent = PatternExplanationAgent()
-    
-    explanation = agent.explain_pattern(
-        transactor_name="Netflix",
-        pattern_case=candidate.pattern_case,
-        interval_days=candidate.interval_days,
-        amount_behavior=candidate.amount_behavior,
-        avg_amount=candidate.cluster.avg_amount,
-        min_amount=candidate.cluster.min_amount,
-        max_amount=candidate.cluster.max_amount,
-        confidence=candidate.confidence,
-        observation_count=len(candidate.transactions),
-        currency_symbol="₹"
-    )
-    
-    print(f"\n✓ Pattern Explanation:\n")
-    print(f"  Display Name: {explanation['display_name']}")
-    print(f"  Explanation: {explanation['explanation_text']}")
-    print(f"  Confidence Reasoning: {explanation['confidence_reasoning']}")
-    print(f"  Valid for Users: {explanation['is_valid']}")
-    
-    return explanation
-
-
-# ==============================================================================
-# EXAMPLE 3: Create pattern state and obligation
+# EXAMPLE 2: Create pattern state and obligation
 # ==============================================================================
 
 def example_create_obligation(candidate):
@@ -101,7 +64,7 @@ def example_create_obligation(candidate):
     Example: Create pattern state and compute next obligation.
     """
     print("\n" + "=" * 80)
-    print("EXAMPLE 3: Obligation Creation")
+    print("EXAMPLE 2: Obligation Creation")
     print("=" * 80)
     
     # Create initial pattern state
@@ -147,7 +110,7 @@ def example_create_obligation(candidate):
 
 
 # ==============================================================================
-# EXAMPLE 4: Process new transaction (obligation matching)
+# EXAMPLE 3: Process new transaction (obligation matching)
 # ==============================================================================
 
 def example_process_transaction(state):
@@ -155,7 +118,7 @@ def example_process_transaction(state):
     Example: Process a new transaction against pattern state.
     """
     print("\n" + "=" * 80)
-    print("EXAMPLE 4: Transaction Processing")
+    print("EXAMPLE 3: Transaction Processing")
     print("=" * 80)
     
     # Simulate new transaction arriving on time
@@ -200,7 +163,7 @@ def example_process_transaction(state):
 
 
 # ==============================================================================
-# EXAMPLE 5: Handle missed obligation
+# EXAMPLE 4: Handle missed obligation
 # ==============================================================================
 
 def example_handle_miss(state):
@@ -208,7 +171,7 @@ def example_handle_miss(state):
     Example: Handle a missed obligation (safe degradation).
     """
     print("\n" + "=" * 80)
-    print("EXAMPLE 5: Missed Obligation Handling")
+    print("EXAMPLE 4: Missed Obligation Handling")
     print("=" * 80)
     
     # Simulate time passing without transaction
@@ -262,17 +225,14 @@ if __name__ == "__main__":
         
         if candidates:
             candidate = candidates[0]
-            
-            # Example 2: Explain pattern
-            explanation = example_explain_pattern(candidate)
-            
-            # Example 3: Create obligation
+
+            # Example 2: Create obligation
             state, obligation = example_create_obligation(candidate)
-            
-            # Example 4: Process transaction
+
+            # Example 3: Process transaction
             updated_state = example_process_transaction(state)
-            
-            # Example 5: Handle missed obligation
+
+            # Example 4: Handle missed obligation
             final_state = example_handle_miss(updated_state)
             
             print("\n" + "=" * 80)

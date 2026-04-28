@@ -42,6 +42,9 @@ services:
   redis:
     image: redis:7-alpine
     container_name: fincoach-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
     ports:
       - "6379:6379"
     networks:
@@ -96,6 +99,7 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
 
 networks:
   api: 

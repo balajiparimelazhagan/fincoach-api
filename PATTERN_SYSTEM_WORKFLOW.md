@@ -124,17 +124,7 @@ This document explains how the recurring pattern detection and obligation tracki
   - Step 9: Return PatternCandidate objects
 - Returns list of discovered patterns
 
-### Step 4: Get LLM Explanation
-- File: api/app/services/pattern_service.py
-- Function: _discover_patterns_for_group() [line 230]
-- Calls PatternExplanationAgent.explain_pattern()
-- Uses currency symbol from CURRENCY_SYMBOLS constant (api/agent/regex_constants.py)
-- LLM only judges and explains, never computes
-- LLM can mark pattern as invalid if it doesn't make sense
-- Returns human-readable explanation for UI
-- Includes transactor object in result dict to avoid SQLAlchemy lazy loading issues
-
-### Step 5: Save Pattern to Database
+### Step 4: Save Pattern to Database
 - File: api/app/services/pattern_service.py
 - Function: _save_pattern() [line 272]
 - Check if pattern already exists (by user_id, transactor_id, direction)
@@ -143,7 +133,7 @@ This document explains how the recurring pattern detection and obligation tracki
 - Flush to get pattern ID
 - After commit, refresh pattern with transactor relationship loaded to prevent lazy loading errors
 
-### Step 6: Create or Update Streak
+### Step 5: Create or Update Streak
 - File: api/app/services/pattern_service.py
 - Function: _save_pattern() [line 320]
 - Check if streak record exists
@@ -157,7 +147,7 @@ This document explains how the recurring pattern detection and obligation tracki
 - Set missed_count = 0
 - Set confidence_multiplier = 1.0
 
-### Step 7: Link Transactions to Pattern
+### Step 6: Link Transactions to Pattern
 - File: api/app/services/pattern_service.py
 - Function: _save_pattern() [line 351]
 - For each transaction in the discovered pattern:
@@ -165,7 +155,7 @@ This document explains how the recurring pattern detection and obligation tracki
   - If not: create new pattern_transactions row
   - Links transaction to pattern permanently
 
-### Step 8: Create Initial Obligation
+### Step 7: Create Initial Obligation
 - File: api/app/services/pattern_service.py
 - Function: _create_next_obligation() [line 388]
 - Calls PatternObligationManager.create_initial_state() from api/agent/pattern_obligation_manager.py
@@ -449,10 +439,9 @@ This document explains how the recurring pattern detection and obligation tracki
 4. Service → For each group, call _discover_patterns_for_group()
 5. Service → DeterministicPatternDiscovery.discover_patterns()
 6. Engine → Run Steps 0-9, return PatternCandidate
-7. Service → PatternExplanationAgent.explain_pattern()
-8. Service → _save_pattern() saves to database
-9. Database → recurring_patterns + recurring_pattern_streaks + pattern_transactions + pattern_obligations
-10. API Route → Return discovered patterns to user
+7. Service → _save_pattern() saves to database
+8. Database → recurring_patterns + recurring_pattern_streaks + pattern_transactions + pattern_obligations
+9. API Route → Return discovered patterns to user
 
 ### Real-Time Flow
 1. Transaction Created → handle_new_transaction()

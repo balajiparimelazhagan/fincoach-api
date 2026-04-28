@@ -1,13 +1,10 @@
 """
-Confidence Calculator Agent for computing overall pattern confidence.
-Part of the Spending Analysis agentic system using Google ADK.
+Confidence Calculator for computing overall pattern confidence.
 """
 
 from dataclasses import dataclass
 from typing import Dict
 import logging
-
-from google.adk.agents.llm_agent import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -34,75 +31,17 @@ class ConfidenceScores:
 class ConfidenceCalculator:
     """
     Calculator for determining pattern confidence.
-    
-    Combines multiple signals:
-    1. Frequency consistency (how regular is the interval?)
-    2. Amount consistency (fixed vs variable)
-    3. Date consistency (same date each period?)
-    4. Data points (more data = higher confidence)
+
+    Combines multiple signals using a weighted average:
+    - Frequency consistency (35%)
+    - Amount consistency (25%)
+    - Date consistency (20%)
+    - Data points count (15%)
+    - Pattern type strength (5%)
     """
-    
+
     def __init__(self):
-        """Initialize the confidence calculator"""
-        self.agent = Agent(
-            model="gemini-2.5-flash",
-            name="confidence_calculator_agent",
-            description="Calculates confidence score for detected patterns",
-            instruction=self._get_system_instruction(),
-        )
-        logger.info("Confidence Calculator Agent initialized")
-    
-    def _get_system_instruction(self) -> str:
-        """Get system instruction for confidence calculation"""
-        return """You are an expert at assessing the reliability of recurring transaction patterns.
-
-Your task is to evaluate multiple factors and produce a confidence score (0-1):
-
-Factors to Consider:
-1. FREQUENCY CONSISTENCY (0-1):
-   - Perfect monthly every month = 0.95
-   - Monthly with 1-2 skips = 0.80
-   - Bi-monthly consistently = 0.90
-   - Irregular gaps = 0.50
-
-2. AMOUNT CONSISTENCY (0-1):
-   - Fixed amount (variance <5%) = 0.95
-   - Variable but predictable (5-30%) = 0.75
-   - Highly variable (30-50%) = 0.50
-   - Unpredictable amounts (>50%) = 0.30
-
-3. DATE CONSISTENCY (0-1):
-   - Same day every month = 0.95
-   - Within ±2 days = 0.80
-   - Within ±5 days = 0.60
-   - Highly variable dates = 0.30
-
-4. DATA POINTS (0-1):
-   - 3 occurrences = 0.60
-   - 5 occurrences = 0.75
-   - 10+ occurrences = 0.95
-
-5. PATTERN STRENGTH (0-1):
-   - Monthly fixed = 0.95
-   - Monthly variable = 0.75
-   - Bi-monthly = 0.80
-   - Quarterly = 0.70
-   - Flexible = 0.60
-
-OVERALL CONFIDENCE = Weighted Average
-- Frequency: 35% weight
-- Amount: 25% weight
-- Dates: 20% weight
-- Data Points: 15% weight
-- Pattern Strength: 5% weight
-
-Example:
-Frequency=0.85, Amount=0.75, Dates=0.60, DataPoints=0.75, Strength=0.75
-= (0.85*0.35) + (0.75*0.25) + (0.60*0.20) + (0.75*0.15) + (0.75*0.05)
-= 0.2975 + 0.1875 + 0.12 + 0.1125 + 0.0375
-= 0.755 ≈ 0.76
-
-Always ensure final confidence is between 0.0 and 1.0."""
+        logger.info("Confidence Calculator initialized")
 
     def calculate_confidence(
         self,

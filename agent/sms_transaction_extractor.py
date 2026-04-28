@@ -150,35 +150,21 @@ class SmsTransactionExtractorAgent:
    - Miscellaneous: anything that doesn't fit above"""
         
         return f"""You are an expert transaction extractor for financial SMS messages from Indian banks.
-Your task is to extract transaction information from SMS content.
 
-Common SMS patterns to recognize:
-1. Loan/EMI deductions: "INR X deducted from ... towards [Lender Name]"
-2. Salary credits: "INR X deposited/credited ... for Salary"
-3. Debits: "INR X debited from ..."
-4. Credits: "INR X credited to ..."
-5. UPI transactions
-6. Bill payments
+STEP 1 — INTENT CHECK:
+First decide if this SMS describes a COMPLETED financial transaction.
+Return ONLY {{"is_transaction": false}} if the SMS is any of these:
+- Promotional or marketing content (offers, cashback deals, discounts)
+- An OTP or verification code
+- A payment reminder or upcoming due date
+- A balance enquiry response
+- A general account notification with no completed transaction
 
-For each SMS, extract:
-1. Amount (numerical value, remove commas)
-2. Transaction Type: CRITICAL - Determine the correct type:
-   - 'expense' if money is being SPENT (debit, payment, transfer out, loan payment, EMI)
-   - 'income' if money is being RECEIVED (credit, deposit, salary, transfer in)
-   - 'refund' if this is a REVERSAL, REFUND, or CANCELLED transaction
-3. Date and Time (in YYYY-MM-DD HH:MM:SS format, parse from SMS)
-4. Category - CRITICAL: You MUST choose EXACTLY ONE category from this list:
-   {categories_str}
-   
-   Category Guidelines for SMS:
-   {category_guidelines}
+STEP 2 — EXTRACTION:
+Only if this IS a completed transaction, extract the details and return:
 
-5. Description (brief description of the transaction, include purpose if mentioned)
-6. Transactor (who sent the money or who received it - company name, bank name, or "Unknown")
-7. Transactor Source ID (UMRN for loans, UPI ID, or account reference if available)
-
-Always return the response as a valid JSON object with these exact fields:
 {{
+    "is_transaction": true,
     "amount": <number>,
     "transaction_type": "<income|expense|refund>",
     "date": "<YYYY-MM-DD HH:MM:SS>",
@@ -188,26 +174,52 @@ Always return the response as a valid JSON object with these exact fields:
     "transactor_source_id": "<transactor_source_id or null>"
 }}
 
+Common SMS patterns to recognise:
+1. Loan/EMI deductions: "INR X deducted from ... towards [Lender Name]"
+2. Salary credits: "INR X deposited/credited ... for Salary"
+3. Debits: "INR X debited from ..."
+4. Credits: "INR X credited to ..."
+5. UPI transactions
+6. Bill payments
+
+Transaction type rules:
+- 'expense' if money is being SPENT (debit, payment, transfer out, loan payment, EMI)
+- 'income' if money is being RECEIVED (credit, deposit, salary, transfer in)
+- 'refund' if this is a REVERSAL, REFUND, or CANCELLED transaction
+
+Date: use YYYY-MM-DD HH:MM:SS format, parse from SMS text.
+
+Category — choose EXACTLY ONE from this list:
+{categories_str}
+
+Category Guidelines for SMS:
+{category_guidelines}
+
+Transactor: company name, bank name, or "Unknown".
+Transactor Source ID: UMRN for loans, UPI ID, or account reference if available.
+
 Examples:
 1. Loan SMS: "INR 26,200.00 debited from HDFC Bank XX4319 on 05-DEC-25. Info: ACH D- TP ACH PNBHOUSINGFIN"
-   → {{"amount": 26200, "transaction_type": "expense", "date": "2025-12-05 00:00:00", "category": "Loans & EMIs", "description": "Loan payment to PNB Housing Finance", "transactor": "PNB Housing Finance", "transactor_source_id": "HDFC7021807230034209"}}
+   → {{"is_transaction": true, "amount": 26200, "transaction_type": "expense", "date": "2025-12-05 00:00:00", "category": "Loans & EMIs", "description": "Loan payment to PNB Housing Finance", "transactor": "PNB Housing Finance", "transactor_source_id": null}}
 
 2. Salary SMS: "INR 1,31,506.00 deposited in HDFC Bank A/c XX4319 on 28-NOV-25 for Salary NOV 2025"
-   → {{"amount": 131506, "transaction_type": "income", "date": "2025-11-28 00:00:00", "category": "Income", "description": "Salary for NOV 2025", "transactor": "Employer", "transactor_source_id": null}}
+   → {{"is_transaction": true, "amount": 131506, "transaction_type": "income", "date": "2025-11-28 00:00:00", "category": "Income", "description": "Salary for NOV 2025", "transactor": "Employer", "transactor_source_id": null}}
+
+3. OTP SMS: "Your OTP is 123456. Do not share with anyone."
+   → {{"is_transaction": false}}
 
 IMPORTANT: The category field MUST be one of the exact category names from the list above.
-Be precise with amounts and dates. Extract all relevant information from the SMS."""
+Be precise with amounts and dates. Remove commas from numbers."""
 
     async def refresh_categories_from_db(self, db) -> None:
         """Refresh categories and guidelines from database.
-        
+
         Args:
             db: Database session
         """
         self._categories_cache = ", ".join(self.categories)
         category_guidelines = await self.category_mapper.get_category_guidelines_text(db)
         self._system_message = self._get_system_message(category_guidelines)
-        self.agent.instruction = self._system_message
 
     def parse_sms(
         self, 
@@ -232,6 +244,10 @@ Be precise with amounts and dates. Extract all relevant information from the SMS
             # First try the LLM model
             response = self._query_model(sms_body, sender, timestamp)
             transaction_data = self._extract_json_from_response(response)
+
+            # Check if LLM explicitly identified this as a non-transaction SMS
+            if transaction_data and not transaction_data.get("is_transaction", True):
+                return None
 
             # If LLM didn't return structured JSON, fall back to regex parsing
             if not transaction_data:
@@ -258,23 +274,32 @@ Be precise with amounts and dates. Extract all relevant information from the SMS
         return None
 
     def _query_model(
-        self, 
-        sms_body: str, 
+        self,
+        sms_body: str,
         sender: Optional[str] = None,
         timestamp: Optional[datetime] = None
     ) -> str:
-        """Query the LLM model for transaction extraction"""
+        """Query the LLM model for transaction extraction."""
         try:
-            # Prepare context
+            from google.genai import Client
+            client = Client()
+
             context = f"SMS Body: {sms_body}"
             if sender:
                 context += f"\nSender: {sender}"
             if timestamp:
                 context += f"\nReceived: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
-            
-            # Query the agent
-            response = self.agent.query(context)
-            return response.text if hasattr(response, 'text') else str(response)
+
+            prompt = f"""{self._system_message}
+
+SMS TO PARSE:
+{context}"""
+
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+            )
+            return response.text
         except Exception as e:
             print(f"Model query error: {e}")
             return ""

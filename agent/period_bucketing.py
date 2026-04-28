@@ -10,8 +10,6 @@ from decimal import Decimal
 import logging
 from collections import defaultdict
 
-from google.adk.agents.llm_agent import Agent
-
 logger = logging.getLogger(__name__)
 
 
@@ -98,41 +96,7 @@ class PeriodBucketingAgent:
     """
     
     def __init__(self):
-        """Initialize the period bucketing agent"""
-        self.agent = Agent(
-            model="gemini-2.5-flash",
-            name="period_bucketing_agent",
-            description="Groups and aggregates transactions by time periods for pattern analysis",
-            instruction=self._get_system_instruction(),
-        )
         logger.info("Period Bucketing Agent initialized")
-    
-    def _get_system_instruction(self) -> str:
-        """Get system instruction for period bucketing"""
-        return """You are an expert at analyzing transaction time periods for pattern detection.
-
-Your task is to help analyze how transactions are distributed across time periods.
-
-For a given set of transactions from a single transactor:
-1. Identify the time periods (months) in which transactions occur
-2. Count transactions in each period
-3. Calculate aggregate amounts per period
-4. Identify period gaps (months without transactions)
-5. Detect which periods have consecutive presence
-
-Key Outputs:
-- Which months have transactions from this transactor
-- Which months are missing transactions
-- Which periods show consecutive presence
-- Summary statistics per period
-
-You should be able to answer questions like:
-- "In which 3 consecutive months does this transactor appear?"
-- "What are the gaps between transactions?"
-- "Is there a monthly pattern?"
-- "Are transactions bi-monthly or quarterly?"
-
-Respond with analysis of the transaction timeline."""
 
     def bucket_transactions(self, transactions_data: Dict) -> TransactorBuckets:
         """
