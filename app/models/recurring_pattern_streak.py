@@ -5,7 +5,7 @@ Tracks whether recurring behavior is still holding via streaks and confidence mu
 from sqlalchemy import Column, DateTime, Numeric, Integer, ForeignKey, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 from app.db import Base
@@ -63,7 +63,7 @@ class RecurringPatternStreak(Base):
     )
     
     # When was this last updated?
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationship
     pattern = relationship("RecurringPattern", back_populates="streak", uselist=False)

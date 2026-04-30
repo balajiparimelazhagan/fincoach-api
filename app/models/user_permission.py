@@ -3,7 +3,7 @@ User Permission Model for tracking user consents for SMS, Email, etc.
 """
 from sqlalchemy import Column, String, DateTime, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import enum
 
@@ -28,11 +28,11 @@ class UserPermission(Base):
         nullable=False,
         index=True,
     )
-    granted_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    revoked_at = Column(DateTime, nullable=True)
+    granted_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
     is_active = Column(String, nullable=False, default=True)  # Derived from revoked_at
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     def __repr__(self):
         status = "active" if self.is_active else "revoked"
@@ -45,5 +45,5 @@ class UserPermission(Base):
 
     def revoke(self):
         """Revoke the permission"""
-        self.revoked_at = datetime.utcnow()
+        self.revoked_at = datetime.now(timezone.utc)
         self.is_active = False

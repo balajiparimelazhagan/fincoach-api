@@ -6,7 +6,7 @@ Immutable: detection output; Mutable: status, confidence (after streak calc), la
 from sqlalchemy import Column, String, DateTime, Numeric, Integer, Index, ForeignKey, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 from app.db import Base
@@ -72,13 +72,13 @@ class RecurringPattern(Base):
     confidence = Column(Numeric(precision=4, scale=3), nullable=False)  # 0.0 to 1.0
     
     # Tracking metadata
-    detected_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    last_evaluated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    detected_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    last_evaluated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     detection_version = Column(Integer, nullable=False, default=1)
     
     # Timestamps
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     
     # Account this pattern is associated with (nullable — derived from transaction history)
     account_id = Column(UUID(as_uuid=False), ForeignKey('accounts.id', ondelete='SET NULL'), nullable=True, index=True)

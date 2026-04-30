@@ -6,7 +6,7 @@ Append-only table to avoid reassignment bugs.
 from sqlalchemy import Column, DateTime, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 from app.db import Base
@@ -42,7 +42,7 @@ class PatternTransaction(Base):
     )
     
     # Metadata
-    linked_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    linked_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     
     # Relationships
     pattern = relationship("RecurringPattern", backref="pattern_transactions")

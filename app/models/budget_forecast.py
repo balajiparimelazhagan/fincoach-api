@@ -5,7 +5,7 @@ Append-only: new forecast = new row. Not authoritative; can be safely regenerate
 from sqlalchemy import Column, String, DateTime, Numeric, Text, Index, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 from app.db import Base
@@ -68,8 +68,8 @@ class BudgetForecast(Base):
     explanation_text = Column(Text, nullable=True)  # e.g., "Detected monthly subscription" or "Frequent but variable"
     
     # Metadata
-    generated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)  # When forecast was created
-    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)  # When row was inserted
+    generated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))  # When forecast was created
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))  # When row was inserted
     
     # Relationships
     user = relationship("User", backref="budget_forecasts")

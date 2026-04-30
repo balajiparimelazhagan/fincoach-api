@@ -6,7 +6,7 @@ Stateful obligation tracking for recurring patterns.
 from sqlalchemy import Column, String, DateTime, Numeric, ForeignKey, Index, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 from app.db import Base
@@ -72,8 +72,8 @@ class PatternObligation(Base):
     days_early = Column(Numeric(precision=5, scale=2), nullable=True)  # Negative if late
     
     # Metadata
-    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     pattern = relationship("RecurringPattern", backref="obligations")
