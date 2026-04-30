@@ -20,7 +20,6 @@ from .regex_constants import (
     ALT_AMOUNT_PATTERN,
     ALT_REF_PATTERN,
     AMOUNT_PATTERN,
-    BANK_PATTERN,
     BILL_PATTERN,
     CREDIT_PATTERN,
     DATE_PATTERN,
@@ -30,6 +29,7 @@ from .regex_constants import (
     TRANSFER_PATTERN,
     UPI_PATTERN,
 )
+
 
 load_dotenv()
 
@@ -249,10 +249,6 @@ Be precise with amounts and dates. Remove commas from numbers."""
             if transaction_data and not transaction_data.get("is_transaction", True):
                 return None
 
-            # If LLM didn't return structured JSON, fall back to regex parsing
-            if not transaction_data:
-                transaction_data = self._parse_with_regex(sms_body, sender, timestamp)
-
             if transaction_data:
                 # Extract account information using A2A coordination
                 account_info = self.account_extractor.extract_account_info(
@@ -298,6 +294,7 @@ SMS TO PARSE:
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=prompt,
+                config={"response_mime_type": "application/json"},
             )
             return response.text
         except Exception as e:

@@ -7,9 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 import json
-import os
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from dotenv import load_dotenv
 from google.adk.agents.llm_agent import Agent
@@ -20,7 +19,6 @@ from .regex_constants import (
     ALT_AMOUNT_PATTERN,
     ALT_REF_PATTERN,
     AMOUNT_PATTERN,
-    BANK_PATTERN,
     BILL_PATTERN,
     CREDIT_PATTERN,
     DATE_PATTERN,
@@ -30,6 +28,7 @@ from .regex_constants import (
     TRANSFER_PATTERN,
     UPI_PATTERN,
 )
+
 
 load_dotenv()
 
@@ -196,8 +195,27 @@ Category — choose EXACTLY ONE from this list:
 Category Guidelines:
 {category_guidelines}
 
-Transactor: who sent the money or who received it (name, bank, or UPI ID).
-Transactor Source ID: UPI ID or bank reference ID, or null if not available.
+Transactor: the actual merchant, person, or business who received or sent the money — NOT the bank sending this notification.
+Transactor Source ID: UPI VPA/ID or bank reference number, or null if not available.
+
+Few-shot examples (input email → expected JSON output):
+
+Input: "Rs.40.00 has been debited from account 4319 to VPA dbsaquafarms@indianbk DBS AQUA FARMS on 20-04-26. Your UPI transaction reference number is 121905686940. Warm Regards, HDFC Bank"
+Output: {{"is_transaction": true, "amount": 40.00, "transaction_type": "expense", "date": "2026-04-20 00:00:00", "category": "Food", "description": "UPI payment to DBS AQUA FARMS", "transactor": "DBS AQUA FARMS", "transactor_source_id": "dbsaquafarms@indianbk"}}
+
+Input: "Rs.70.00 has been debited from account 4319 to VPA paytmqr5dcosc@ptys VEL PHARMACY on 20-04-26. Your UPI transaction reference number is 121906639295. Warm Regards, HDFC Bank"
+Output: {{"is_transaction": true, "amount": 70.00, "transaction_type": "expense", "date": "2026-04-20 00:00:00", "category": "Health", "description": "UPI payment to VEL PHARMACY", "transactor": "VEL PHARMACY", "transactor_source_id": "paytmqr5dcosc@ptys"}}
+
+Input: "Rs.50.00 has been debited from account 4319 to VPA paytmqr6xmlpp@ptys Chandrasekaran on 20-04-26. Your UPI transaction reference number is 121906836463. Warm Regards, HDFC Bank"
+Output: {{"is_transaction": true, "amount": 50.00, "transaction_type": "expense", "date": "2026-04-20 00:00:00", "category": "Miscellaneous", "description": "UPI payment to Chandrasekaran", "transactor": "Chandrasekaran", "transactor_source_id": "paytmqr6xmlpp@ptys"}}
+
+Input: "Rs.2320.00 has been debited from account 4319 to account *0056 on 20-04-26. Your UPI transaction reference number is 121877623825. Warm Regards, HDFC Bank"
+Output: {{"is_transaction": true, "amount": 2320.00, "transaction_type": "expense", "date": "2026-04-20 00:00:00", "category": "Transfers", "description": "Bank transfer to account *0056", "transactor": "*0056", "transactor_source_id": null}}
+
+Input: "Rs.5000.00 credited to your account 4319 from Rahul Sharma via UPI on 19-04-26. Ref 120001234567. Warm Regards, ICICI Bank"
+Output: {{"is_transaction": true, "amount": 5000.00, "transaction_type": "income", "date": "2026-04-19 00:00:00", "category": "Income", "description": "UPI credit from Rahul Sharma", "transactor": "Rahul Sharma", "transactor_source_id": null}}
+
+Rule: for UPI debits the transactor is the name AFTER the VPA ID. For account transfers with no name, use the destination account reference. The bank in the sign-off (HDFC Bank, SBI, ICICI Bank, etc.) is never the transactor.
 
 IMPORTANT: The category field MUST be one of the exact category names from the list above.
 If any information is missing, make a reasonable inference based on the email content."""
@@ -238,7 +256,6 @@ If any information is missing, make a reasonable inference based on the email co
             if transaction_data and not transaction_data.get("is_transaction", True):
                 return None
 
-            # If LLM didn't return structured JSON, fall back to regex parsing
             if not transaction_data:
                 transaction_data = self._parse_with_regex(message_id, email_subject, email_body)
 
@@ -263,32 +280,22 @@ If any information is missing, make a reasonable inference based on the email co
         return None
 
     def _parse_with_regex(self, message_id: str, subject: str, body: str) -> Optional[Dict]:
-        """Fallback parser using regexes to handle bank / UPI notification formats.
-
-        Returns a dict with keys compatible with _create_transaction or None.
-        """
+        """Fallback parser using regexes when the LLM returns unparseable output."""
         text = f"{subject}\n\n{body}"
 
-        # Amount detection (handles Rs., INR, ₹ and numbers with commas)
         amount = None
-        amt_match = AMOUNT_PATTERN.search(text)
-        if not amt_match:
-            # fallback to plain numbers with currency-like context
-            amt_match = ALT_AMOUNT_PATTERN.search(text)
+        amt_match = AMOUNT_PATTERN.search(text) or ALT_AMOUNT_PATTERN.search(text)
         if amt_match:
             try:
-                amt_str = amt_match.group(1).replace(",", "")
-                amount = float(amt_str)
+                amount = float(amt_match.group(1).replace(",", ""))
             except Exception:
                 amount = None
 
-        # Date detection: dd-mm-yy or dd-mm-yyyy or dd/mm/yy with optional time
         date_str = None
         date_match = DATE_PATTERN.search(text)
         if date_match:
             date_str = self._normalize_date(date_match.group(1))
 
-        # Transaction type: Check for refund first, then debit/credit
         trans_type = None
         if REFUND_PATTERN.search(text):
             trans_type = "refund"
@@ -297,95 +304,62 @@ If any information is missing, make a reasonable inference based on the email co
         elif CREDIT_PATTERN.search(text):
             trans_type = "income"
 
-        # Source / bank name
-        source = None
-        bank_match = BANK_PATTERN.search(text)
-        if bank_match:
-            source = bank_match.group(1)
-
-        # UPI / reference detection
         ref = None
-        ref_match = REF_PATTERN.search(text)
-        if not ref_match:
-            ref_match = ALT_REF_PATTERN.search(text)
+        ref_match = REF_PATTERN.search(text) or ALT_REF_PATTERN.search(text)
         if ref_match:
             ref = ref_match.group(1)
 
-        # Account info
         acct_from = None
-        acct_match = ACCOUNT_PATTERN.search(text)
+        acct_match = ACCOUNT_PATTERN.search(text) or ALT_ACCOUNT_PATTERN.search(text)
         if acct_match:
             acct_from = acct_match.group(1)
-        else:
-            acct_match = ALT_ACCOUNT_PATTERN.search(text)
-            if acct_match:
-                acct_from = acct_match.group(1)
 
-        # Category inference using standard categories
-        category = None
-        if UPI_PATTERN.search(text):
-            category = "Transfers"  # Map UPI Transfer to standard category
-        elif TRANSFER_PATTERN.search(text):
-            category = "Transfers"  # Map Bank Transfer to standard category
+        if UPI_PATTERN.search(text) or TRANSFER_PATTERN.search(text):
+            category = "Transfers"
         elif BILL_PATTERN.search(text):
-            category = "Fees & Charges"  # Map Bills to standard category
+            category = "Fees & Charges"
         else:
-            category = "Miscellaneous"  # Map Other to standard category
+            category = "Miscellaneous"
 
-        # Description
         desc_parts = []
         if ref:
             desc_parts.append(f"Ref {ref}")
         if acct_from:
             desc_parts.append(f"From acct {acct_from}")
-        # include a short snippet
         snippet = re.sub(r"\s+", " ", text.strip())
-        if len(snippet) > 120:
-            snippet = snippet[:117] + "..."
-        desc_parts.append(snippet)
-        description = "; ".join(desc_parts) if desc_parts else None
+        desc_parts.append(snippet[:117] + "..." if len(snippet) > 120 else snippet)
 
-        # Build result dict if at least amount and date or amount and type present
-        result: Dict = {}
-        if amount is not None:
-            result["amount"] = amount
-            result["transaction_type"] = trans_type or "expense"
-            if not date_str:
-                return None  # reject: no reliable date found
-            result["date"] = date_str
-            result["category"] = category or "Miscellaneous"
-            result["description"] = description
-            result["transactor"] = source or ""
-            result["transactor_source_id"] = ref or acct_from
-            result["confidence"] = 0.8
-            result["message_id"] = message_id
-            return result
+        if amount is None or not date_str:
+            return None
 
-        return None
+        return {
+            "amount": amount,
+            "transaction_type": trans_type or "expense",
+            "date": date_str,
+            "category": category,
+            "description": "; ".join(desc_parts),
+            "transactor": None,
+            "transactor_source_id": ref or acct_from,
+            "confidence": 0.8,
+            "message_id": message_id,
+        }
 
     def _query_model(self, email_content: str) -> str:
-        """
-        Query the Gemini model directly for email parsing.
-
-        Args:
-            email_content: The email content to parse
-
-        Returns:
-            The model's response as a string
-        """
         try:
             from google.genai import Client
             client = Client()
-            
+
             prompt = f"""{self._system_message}
-                EMAIL TO PARSE:
-                {email_content}"""
-            
+
+EMAIL TO PARSE:
+{email_content}"""
+
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=prompt,
+                config={"response_mime_type": "application/json"},
             )
-            
+
             return response.text
         except Exception as e:
             print(f"Error querying model: {e}")

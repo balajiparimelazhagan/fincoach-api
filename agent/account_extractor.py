@@ -12,7 +12,6 @@ import logging
 from dotenv import load_dotenv
 from google.adk.agents.llm_agent import Agent
 
-from .regex_constants import ACCOUNT_PATTERN, ALT_ACCOUNT_PATTERN
 
 load_dotenv()
 
