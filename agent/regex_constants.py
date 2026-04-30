@@ -22,6 +22,15 @@ ALT_REF_PATTERN = re.compile(
 ACCOUNT_PATTERN = re.compile(r"from account\s*(\d{2,}\d*)", re.IGNORECASE)
 ALT_ACCOUNT_PATTERN = re.compile(r"acct(?:ount)?[:#]?\s*(\d{2,}\d*)", re.IGNORECASE)
 
+# Payee name from UPI notification: "to VPA <vpa_id> MERCHANT NAME on DD-MM-YY"
+UPI_PAYEE_PATTERN = re.compile(
+    r"to\s+VPA\s+\S+\s+(.+?)\s+on\s+\d{1,2}[-/]\d{1,2}[-/]\d{2,4}", re.IGNORECASE
+)
+# Account transfer with no name: "to account *0056 on DD-MM-YY"
+ACCOUNT_TO_PATTERN = re.compile(
+    r"to account\s+(\*?\w+)\s+on\s+\d{1,2}[-/]\d{1,2}[-/]\d{2,4}", re.IGNORECASE
+)
+
 # Currency code to symbol mapping
 CURRENCY_SYMBOLS = {
     'INR': '₹',

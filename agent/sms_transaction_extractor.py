@@ -19,6 +19,7 @@ from .regex_constants import (
     ALT_ACCOUNT_PATTERN,
     ALT_AMOUNT_PATTERN,
     ALT_REF_PATTERN,
+    ACCOUNT_TO_PATTERN,
     AMOUNT_PATTERN,
     BILL_PATTERN,
     CREDIT_PATTERN,
@@ -28,6 +29,7 @@ from .regex_constants import (
     REFUND_PATTERN,
     TRANSFER_PATTERN,
     UPI_PATTERN,
+    UPI_PAYEE_PATTERN,
 )
 
 
@@ -249,6 +251,9 @@ Be precise with amounts and dates. Remove commas from numbers."""
             if transaction_data and not transaction_data.get("is_transaction", True):
                 return None
 
+            if not transaction_data:
+                transaction_data = self._parse_with_regex(sms_body, timestamp)
+
             if transaction_data:
                 # Extract account information using A2A coordination
                 account_info = self.account_extractor.extract_account_info(
@@ -314,9 +319,8 @@ SMS TO PARSE:
         return None
 
     def _parse_with_regex(
-        self, 
-        sms_body: str, 
-        sender: Optional[str] = None,
+        self,
+        sms_body: str,
         timestamp: Optional[datetime] = None
     ) -> Optional[Dict]:
         """Fallback parser using regexes for Indian bank SMS patterns"""
@@ -395,12 +399,14 @@ SMS TO PARSE:
         # Extract transactor
         transactor = None
         transactor_source_id = None
-        
-        # Look for company/lender names
-        if "housing" in text_lower and "finance" in text_lower:
-            transactor = "PNB Housing Finance"
-        elif sender:
-            transactor = sender
+
+        upi_payee = UPI_PAYEE_PATTERN.search(text)
+        if upi_payee:
+            transactor = upi_payee.group(1).strip()
+        else:
+            acct_to = ACCOUNT_TO_PATTERN.search(text)
+            if acct_to:
+                transactor = acct_to.group(1).strip()
         
         # Extract UMRN or reference
         ref_match = REF_PATTERN.search(text) or ALT_REF_PATTERN.search(text)

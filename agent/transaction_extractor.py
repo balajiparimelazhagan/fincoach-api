@@ -15,6 +15,7 @@ from google.adk.agents.llm_agent import Agent
 
 from .regex_constants import (
     ACCOUNT_PATTERN,
+    ACCOUNT_TO_PATTERN,
     ALT_ACCOUNT_PATTERN,
     ALT_AMOUNT_PATTERN,
     ALT_REF_PATTERN,
@@ -27,6 +28,7 @@ from .regex_constants import (
     REFUND_PATTERN,
     TRANSFER_PATTERN,
     UPI_PATTERN,
+    UPI_PAYEE_PATTERN,
 )
 
 
@@ -304,6 +306,15 @@ If any information is missing, make a reasonable inference based on the email co
         elif CREDIT_PATTERN.search(text):
             trans_type = "income"
 
+        source = None
+        upi_payee = UPI_PAYEE_PATTERN.search(text)
+        if upi_payee:
+            source = upi_payee.group(1).strip()
+        else:
+            acct_to = ACCOUNT_TO_PATTERN.search(text)
+            if acct_to:
+                source = acct_to.group(1).strip()
+
         ref = None
         ref_match = REF_PATTERN.search(text) or ALT_REF_PATTERN.search(text)
         if ref_match:
@@ -338,7 +349,7 @@ If any information is missing, make a reasonable inference based on the email co
             "date": date_str,
             "category": category,
             "description": "; ".join(desc_parts),
-            "transactor": None,
+            "transactor": source,
             "transactor_source_id": ref or acct_from,
             "confidence": 0.8,
             "message_id": message_id,
