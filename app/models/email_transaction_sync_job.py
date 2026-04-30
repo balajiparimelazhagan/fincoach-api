@@ -1,6 +1,6 @@
-from sqlalchemy import Column, String, Integer, DateTime, Enum as SQLEnum, Boolean
+from sqlalchemy import Column, Integer, DateTime, Enum as SQLEnum, Boolean
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import enum
 
@@ -33,10 +33,10 @@ class EmailTransactionSyncJob(Base):
     failed_emails = Column(Integer, default=0, nullable=False)
     skipped_emails = Column(Integer, default=0, nullable=False)
     error_log = Column(JSONB, default=list, nullable=False)
-    started_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     def __repr__(self):
         return f"<EmailTransactionSyncJob(id={self.id}, user_id={self.user_id}, status={self.status})>"

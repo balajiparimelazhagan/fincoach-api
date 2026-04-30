@@ -3,7 +3,7 @@ SMS Transaction Sync Job Model for tracking SMS fetch and parse progress.
 """
 from sqlalchemy import Column, String, Integer, Float, DateTime, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import enum
 
@@ -38,10 +38,10 @@ class SmsTransactionSyncJob(Base):
     skipped_sms = Column(Integer, default=0, nullable=False)  # SMS filtered by intent classifier
     progress_percentage = Column(Float, default=0.0, nullable=False)
     error_log = Column(JSONB, default=list, nullable=False)
-    started_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     def __repr__(self):
         return f"<SmsTransactionSyncJob(id={self.id}, user_id={self.user_id}, status={self.status}, progress={self.progress_percentage}%)>"
